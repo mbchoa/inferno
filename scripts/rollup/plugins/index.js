@@ -1,33 +1,40 @@
-import bublePlugin from 'rollup-plugin-buble';
-
-import commonjs from 'rollup-plugin-commonjs';
-
-import nodeResolve from 'rollup-plugin-node-resolve';
-
-import replacePlugin from 'rollup-plugin-replace';
-
-import { terser } from 'rollup-plugin-terser';
-
-import { aliasPlugin } from './alias.js';
+import commonjs from '@rollup/plugin-commonjs';
+import nodeResolve from '@rollup/plugin-node-resolve';
+import replacePlugin from '@rollup/plugin-replace';
+import terser from '@rollup/plugin-terser';
+import { aliasPlugin, umdAliasPlugin } from './alias.js';
+import babel from '@rollup/plugin-babel';
+import assumptions from '../../babel/assumptions.json' with { type: 'json' };
+import targets from '../../babel/targets.json' with { type: 'json' };
 
 export function createPlugins(version, options) {
   const plugins = [
-    aliasPlugin,
+    options.format === 'umd' ? umdAliasPlugin : aliasPlugin,
     nodeResolve({
       extensions: ['.js', '.json'],
       mainFields: ['module', 'main'],
       preferBuiltins: true
     }),
     commonjs({
-      include: 'node_modules/**'
+      // pnpm resolves packages to the root node_modules, outside of the package directory
+      include: /node_modules/
     })
   ];
 
-  if (!options.esnext) {
-    plugins.push(bublePlugin());
-  }
+  plugins.push(
+    babel({
+      exclude: 'node_modules/**',
+      sourceMaps: false,
+      babelrc: false,
+      presets: [['@babel/env', { modules: false, targets }]],
+      babelHelpers: 'runtime',
+      skipPreflightCheck: true,
+      assumptions
+    })
+  );
 
   const replaceValues = {
+    preventAssignment: true,
     'process.env.INFERNO_VERSION': JSON.stringify(options.version)
   };
 

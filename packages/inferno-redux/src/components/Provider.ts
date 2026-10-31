@@ -1,9 +1,9 @@
-import { Component, Inferno } from 'inferno';
-import { Action, AnyAction, Store } from 'redux';
+import { Component, type InfernoNode } from 'inferno';
+import { type Action, type AnyAction, type Store } from 'redux';
 import { warning } from '../utils/warning';
 
 let didWarnAboutReceivingStore = false;
-const warnAboutReceivingStore = () => {
+const warnAboutReceivingStore = (): void => {
   if (didWarnAboutReceivingStore) {
     return;
   }
@@ -15,10 +15,12 @@ const warnAboutReceivingStore = () => {
 
 export interface Props<A extends Action = AnyAction> {
   store: Store<any, A>;
-  children?: Inferno.InfernoNode;
+  children?: InfernoNode;
 }
 
-export class Provider<A extends Action = AnyAction> extends Component<Props<A>, null> {
+export class Provider<A extends Action = AnyAction> extends Component<
+  Props<A>
+> {
   public static displayName = 'Provider';
   private readonly store: Store<any, A>;
 
@@ -27,26 +29,30 @@ export class Provider<A extends Action = AnyAction> extends Component<Props<A>, 
     this.store = props.store;
   }
 
-  public getChildContext() {
+  public getChildContext(): { store: Store<any, A>; storeSubscription: null } {
     return { store: this.store, storeSubscription: null };
   }
 
   // Don't infer the return type. It may be expanded and cause reference errors
   // in the output.
-  public render(): Inferno.InfernoNode | undefined {
+  public render(): InfernoNode {
     return this.props.children;
   }
 
-  public componentWillReceiveProps?(nextProps: Props<A>, nextContext: any): void;
+  public componentWillReceiveProps?(
+    nextProps: Readonly<{ children?: InfernoNode } & Props<A>>,
+    nextContext: any,
+  ): void;
 }
 
 if (process.env.NODE_ENV !== 'production') {
-  Provider.prototype.componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
-    const { store } = this;
-    const { store: nextStore } = nextProps;
+  Provider.prototype.componentWillReceiveProps =
+    function componentWillReceiveProps(nextProps) {
+      const { store } = this;
+      const { store: nextStore } = nextProps;
 
-    if (store !== nextStore) {
-      warnAboutReceivingStore();
-    }
-  };
+      if (store !== nextStore) {
+        warnAboutReceivingStore();
+      }
+    };
 }

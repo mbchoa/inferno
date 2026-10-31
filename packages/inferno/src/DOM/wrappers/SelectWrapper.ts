@@ -1,63 +1,79 @@
 import { isArray, isNullOrUndef, isNumber } from 'inferno-shared';
-import { ChildFlags, VNodeFlags } from 'inferno-vnode-flags';
+import { VNodeFlags } from 'inferno-vnode-flags';
 import { EMPTY_OBJ } from '../utils/common';
 import { createWrappedFunction } from './wrapper';
 import { attachEvent } from '../events/attachEvent';
+import { type VNode } from '../../core/types';
+import { type Component } from '../../core/component';
 
-function updateChildOptions(vNode, value) {
+function updateChildOptions(vNode: VNode, value): void {
   if (vNode.type === 'option') {
     updateChildOption(vNode, value);
   } else {
-    const children = vNode.children as any;
+    const children = vNode.children;
     const flags = vNode.flags;
 
-    if (flags & VNodeFlags.ComponentClass) {
-      updateChildOptions(children.$LI, value);
-    } else if (flags & VNodeFlags.ComponentFunction) {
-      updateChildOptions(children, value);
-    } else if (vNode.childFlags === ChildFlags.HasVNodeChildren) {
-      updateChildOptions(children, value);
-    } else if (vNode.childFlags & ChildFlags.MultipleChildren) {
-      for (let i = 0, len = children.length; i < len; ++i) {
-        updateChildOptions(children[i], value);
+    if ((flags & VNodeFlags.ComponentClass) !== 0) {
+      updateChildOptions((children as Component).$LI, value);
+    } else if ((flags & VNodeFlags.ComponentFunction) !== 0) {
+      updateChildOptions(children as VNode, value);
+    } else if ((flags & VNodeFlags.HasVNodeChildren) !== 0) {
+      updateChildOptions(children as VNode, value);
+    } else if ((flags & VNodeFlags.MultipleChildren) !== 0) {
+      for (let i = 0, len = (children as VNode[]).length; i < len; ++i) {
+        const child = (children as VNode[])[i];
+        updateChildOptions(child, value);
       }
     }
   }
 }
 
-function updateChildOption(vNode, value) {
-  const props: any = vNode.props || EMPTY_OBJ;
-  const dom = vNode.dom;
+function updateChildOption(vNode: VNode, value: unknown): void {
+  const props: any = vNode.props ?? EMPTY_OBJ;
+  const dom = vNode.dom as any;
+  let propsValue = props.value;
 
-  // we do this as multiple may have changed
-  dom.value = props.value;
-  if (props.value === value || (isArray(value) && value.indexOf(props.value) !== -1)) {
+  if (isNullOrUndef(propsValue)) {
+    // Without a value the browser uses the text of the option
+    propsValue = dom.value;
+  } else {
+    // we do this as multiple prop may have changed
+    dom.value = propsValue;
+  }
+
+  if (propsValue === value || (isArray(value) && value.includes(propsValue))) {
     dom.selected = true;
   } else if (!isNullOrUndef(value) || !isNullOrUndef(props.selected)) {
-    dom.selected = props.selected || false;
+    dom.selected = Boolean(props.selected);
   }
 }
 
 const onSelectChange = createWrappedFunction('onChange', applyValueSelect);
 
-export function selectEvents(dom) {
+export function selectEvents(dom): void {
   attachEvent(dom, 'change', onSelectChange);
 }
 
-export function applyValueSelect(nextPropsOrEmpty, dom, mounting: boolean, vNode) {
+export function applyValueSelect(
+  nextPropsOrEmpty,
+  dom: any,
+  mounting: boolean,
+  vNode,
+): void {
   const multiplePropInBoolean = Boolean(nextPropsOrEmpty.multiple);
-  if (!isNullOrUndef(nextPropsOrEmpty.multiple) && multiplePropInBoolean !== dom.multiple) {
+  if (
+    !isNullOrUndef(nextPropsOrEmpty.multiple) &&
+    multiplePropInBoolean !== dom.multiple
+  ) {
     dom.multiple = multiplePropInBoolean;
   }
   const index = nextPropsOrEmpty.selectedIndex;
   if (index === -1) {
     dom.selectedIndex = -1;
   }
-  const childFlags = vNode.childFlags;
-
-  if (childFlags !== ChildFlags.HasInvalidChildren) {
+  if ((vNode.flags & VNodeFlags.HasInvalidChildren) === 0) {
     let value = nextPropsOrEmpty.value;
-    if (isNumber(index) && index > -1 && dom.options[index]) {
+    if (isNumber(index) && index > -1 && !isNullOrUndef(dom.options[index])) {
       value = dom.options[index].value;
     }
     if (mounting && isNullOrUndef(value)) {

@@ -1,0 +1,87 @@
+import { Component, render } from 'inferno';
+import {
+  observer,
+  observerPatch,
+  observerWrap,
+  useStaticRendering,
+} from 'inferno-mobx';
+import { renderToStaticMarkup } from 'inferno-server';
+import { getObserverTree, observable, runInAction } from 'mobx';
+
+describe('Mobx Observer Server', () => {
+  let container;
+
+  beforeEach(function () {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+  });
+
+  afterEach(function () {
+    render(null, container);
+    container.innerHTML = '';
+    document.body.removeChild(container);
+  });
+
+  it('does not keep views alive when using static + string rendering', function () {
+    useStaticRendering(true);
+
+    let renderCount = 0;
+    const data = observable({
+      z: 'hi',
+    });
+
+    const TestComponent = observer(function testComponent() {
+      renderCount++;
+      return <div>{data.z}</div>;
+    });
+
+    const output = renderToStaticMarkup(<TestComponent />);
+
+    data.z = 'hello';
+
+    expect(output).toBe('<div>hi</div>');
+    expect(renderCount).toBe(1);
+
+    expect(getObserverTree(data, 'z').observers).not.toBeDefined();
+
+    useStaticRendering(false);
+  });
+
+  it('does not keep views alive for observerPatch and observerWrap when using static rendering', function () {
+    useStaticRendering(true);
+
+    const data = observable({
+      z: 'hi',
+    });
+
+    class Patched extends Component {
+      render() {
+        return <div>{data.z}</div>;
+      }
+    }
+    observerPatch(Patched);
+
+    const Wrapped = observerWrap(() => <span>{data.z}</span>);
+
+    try {
+      for (let i = 0; i < 3; ++i) {
+        expect(
+          renderToStaticMarkup(
+            <div>
+              <Patched />
+              <Wrapped />
+            </div>,
+          ),
+        ).toBe('<div><div>hi</div><span>hi</span></div>');
+      }
+
+      expect(getObserverTree(data, 'z').observers).not.toBeDefined();
+
+      runInAction(() => {
+        data.z = 'hello';
+      });
+    } finally {
+      useStaticRendering(false);
+    }
+  });
+});

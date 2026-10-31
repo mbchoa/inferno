@@ -1,15 +1,7 @@
-export const warning = (message: string) => {
-  // tslint:disable-next-line:no-console
-  if (typeof console !== 'undefined' && typeof console.error === 'function') {
-    // tslint:disable-next-line:no-console
+import { isFunction } from 'inferno-shared';
+
+export const warning = (message: string): void => {
+  if (typeof console !== 'undefined' && isFunction(console.error)) {
     console.error(message);
   }
-
-  try {
-    // This error was thrown as a convenience so that if you enable
-    // "break on all exceptions" in your console,
-    // it would pause the execution at this line.
-    throw new Error(message);
-    // tslint:disable-next-line:no-empty
-  } catch (e) {}
 };

@@ -1,18 +1,38 @@
-import { createComponentVNode, createFragment, createVNode, Fragment, getFlagsForElementVnode, Inferno, VNode } from 'inferno';
-import { isArray, isString, isStringOrNumber, isUndefined } from 'inferno-shared';
-import { ChildFlags, VNodeFlags } from 'inferno-vnode-flags';
+import {
+  Fragment,
+  getFlagsForElementVnode,
+  type InfernoNode,
+  newComponentVNode,
+  newFragment,
+  newVNode,
+  type VNode,
+} from 'inferno';
+import {
+  isArray,
+  isString,
+  isStringOrNumber,
+  isUndefined,
+} from 'inferno-shared';
+import { VNodeFlags } from 'inferno-vnode-flags';
 
 const classIdSplit = /([.#]?[a-zA-Z0-9_:-]+)/;
 const notClassId = /^\.|#/;
 
-function parseTag(tag: string | null, props: any): string {
+// Set by parseTag to the id and the classes of the selector. They are not written into the props
+// passed to h, which may be shared between calls.
+let selectorId: string | null = null;
+let selectorClassName: string | null = null;
+
+function parseTag(tag: string | null): string {
+  selectorId = null;
+  selectorClassName = null;
+
   if (!tag) {
     return 'div';
   }
   if (tag === (Fragment as any)) {
     return tag;
   }
-  const noId = props && isUndefined(props.id);
   const tagParts = tag.split(classIdSplit);
   let tagName: null | string = null;
 
@@ -23,7 +43,6 @@ function parseTag(tag: string | null, props: any): string {
 
   for (let i = 0, len = tagParts.length; i < len; ++i) {
     const part = tagParts[i];
-
     if (!part) {
       continue;
     }
@@ -36,15 +55,12 @@ function parseTag(tag: string | null, props: any): string {
         classes = [];
       }
       classes.push(part.substring(1, part.length));
-    } else if (type === '#' && noId) {
-      props.id = part.substring(1, part.length);
+    } else if (type === '#') {
+      selectorId = part.substring(1, part.length);
     }
   }
   if (classes) {
-    if (props.className) {
-      classes.push(props.className);
-    }
-    props.className = classes.join(' ');
+    selectorClassName = classes.join(' ');
   }
   return tagName || 'div';
 }
@@ -60,7 +76,11 @@ function isChildren(x: any): boolean {
  * @param {string|number|VNode|Array<string|number|VNode>|null=} _children Optional children for virtual node
  * @returns {VNode} returns new virtual node
  */
-export function h(_tag: string | VNode | Function, _props?: any, _children?: Inferno.InfernoNode): VNode {
+export function h(
+  _tag: string | VNode | Function,
+  _props?: any,
+  _children?: InfernoNode,
+): VNode {
   // If a child array or text node are passed as the second argument, shift them
   if (!_children && isChildren(_props)) {
     _children = _props;
@@ -68,12 +88,14 @@ export function h(_tag: string | VNode | Function, _props?: any, _children?: Inf
   }
   const isElement = isString(_tag);
   _props = _props || {};
-  const tag = isElement ? parseTag(_tag as string, _props) : _tag;
+  const tag = isElement ? parseTag(_tag) : _tag;
+  const id = selectorId;
+  const classes = selectorClassName;
   const newProps: any = {};
   let key = null;
   let ref: any = null;
   let children = null;
-  let className = null;
+  let className: string | null = null;
 
   for (const prop in _props) {
     if (isElement && (prop === 'className' || prop === 'class')) {
@@ -99,20 +121,43 @@ export function h(_tag: string | VNode | Function, _props?: any, _children?: Inf
   if (isElement) {
     let flags = getFlagsForElementVnode(tag as string);
 
+    // The classes of the selector come first, an id prop wins over the id of the selector
+    if (classes !== null) {
+      className = className ? classes + ' ' + className : classes;
+    }
+    if (id !== null && isUndefined(newProps.id)) {
+      newProps.id = id;
+    }
+
+    // The flags have no child bit, the children are normalized
     if (flags & VNodeFlags.Fragment) {
-      return createFragment(_children || children, ChildFlags.UnknownChildren, key);
+      return newFragment(VNodeFlags.Fragment, _children || children, key);
     }
 
     if (newProps.contenteditable !== void 0) {
       flags |= VNodeFlags.ContentEditable;
     }
 
-    return createVNode(flags, tag as string, className, _children || children, ChildFlags.UnknownChildren, newProps, key, ref);
+    return newVNode(
+      flags,
+      tag as string,
+      className,
+      _children || children,
+      newProps,
+      key,
+      ref,
+    );
   }
 
   if (children || _children) {
     newProps.children = children || _children;
   }
 
-  return createComponentVNode(VNodeFlags.ComponentUnknown, tag as Function, newProps, key, ref);
+  return newComponentVNode(
+    VNodeFlags.ComponentUnknown,
+    tag as any,
+    newProps,
+    key,
+    ref,
+  );
 }

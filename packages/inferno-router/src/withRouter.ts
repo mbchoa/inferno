@@ -1,28 +1,50 @@
-import { createComponentVNode } from 'inferno';
+import {
+  type Component,
+  type ComponentType,
+  type ForwardRef,
+  type InfernoNode,
+  newComponentVNode,
+  type Ref,
+} from 'inferno';
 import { VNodeFlags } from 'inferno-vnode-flags';
-import hoistNonReactStatics from 'hoist-non-inferno-statics';
-import { Route } from './Route';
-import { combineFrom } from 'inferno-shared';
+import { Route, type RouteComponentProps } from './Route';
+import { hoistStaticProperties } from 'inferno-shared';
 
-interface IWithRouterProps {
-  wrappedComponentRef: any;
+export interface IWithRouterProps {
+  wrappedComponentRef?: Ref | null;
 }
 
 /**
  * A public higher-order component to access the imperative API
  */
-export function withRouter(Com) {
-  const C: any = function (props: IWithRouterProps) {
+export function withRouter<
+  P extends RouteComponentProps<any> & IWithRouterProps,
+>(
+  Com: Function | ComponentType<P> | Component<P, any> | ForwardRef<P, any>,
+): any {
+  const C: any = function (props: RouteComponentProps<any> & IWithRouterProps) {
     const { wrappedComponentRef, ...remainingProps } = props;
 
-    return createComponentVNode<any>(VNodeFlags.ComponentClass, Route, {
-      render(routeComponentProps: IWithRouterProps) {
-        return createComponentVNode(VNodeFlags.ComponentUnknown, Com, combineFrom(remainingProps, routeComponentProps), null, wrappedComponentRef);
-      }
-    });
+    return newComponentVNode<any>(
+      VNodeFlags.ComponentClass | VNodeFlags.HasInvalidChildren,
+      Route,
+      {
+        render(routeComponentProps: P & IWithRouterProps): InfernoNode {
+          return newComponentVNode(
+            VNodeFlags.ComponentUnknown,
+            Com,
+            { ...remainingProps, ...routeComponentProps },
+            null,
+            wrappedComponentRef,
+          );
+        },
+      },
+    );
   };
 
+  // @ts-expect-error function name property
   C.displayName = `withRouter(${Com.displayName || Com.name})`;
   C.WrappedComponent = Com;
-  return hoistNonReactStatics(C, Com);
+  hoistStaticProperties(C, Com);
+  return C;
 }

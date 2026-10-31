@@ -1,0 +1,924 @@
+import {
+  renderToStaticMarkup,
+  renderToString,
+  streamAsString,
+  streamQueueAsString,
+} from 'inferno-server';
+import { Component, createFragment, render } from 'inferno';
+import { createElement } from 'inferno-create-element';
+import { ChildFlags } from 'inferno-vnode-flags';
+import { hydrate } from 'inferno-hydrate';
+
+function WrappedInput(props: { value: string }) {
+  return <input type="text" value={props.value} />;
+}
+
+describe('SSR Creation (JSX)', () => {
+  // @ts-ignore
+  const testEntries = [
+    {
+      description: 'should render a null component',
+      template: () => <div>{null}</div>,
+      result: '<div></div>',
+    },
+    {
+      description: 'should render a component with null children',
+      template: () => (
+        <div>
+          {null}
+          <span>emptyValue: {null}</span>
+        </div>
+      ),
+      result: '<div><span>emptyValue: </span></div>',
+    },
+    {
+      description: 'should render a component with valueless attribute',
+      template: () => <script src="foo" async />,
+      result: '<script src="foo" async></script>',
+    },
+    {
+      description: 'should render a stateless component with text',
+      template: () => (
+        <div>
+          Hello world, {'1'}2{'3'}
+        </div>
+      ),
+      result: '<div>Hello world, 123</div>',
+    },
+    {
+      description: 'should render text with escaped symbols',
+      template: () => <div>"Hello world"</div>,
+      result: '<div>&quot;Hello world&quot;</div>',
+    },
+    {
+      description: 'should render a stateless component with comments',
+      template: () => <div>Hello world, {/* comment*/}</div>,
+      result: '<div>Hello world, </div>',
+    },
+    {
+      description: 'should render mixed invalid/valid children',
+      template: () => <div>{[null, '123', null, '456']}</div>,
+      result: '<div>123456</div>',
+    },
+    {
+      description: 'should ignore children as props',
+      // @ts-expect-error
+      template: () => <p children="foo">foo</p>,
+      result: '<p>foo</p>',
+    },
+    {
+      description: 'should render input with value',
+      template: () => <input value="bar" />,
+      result: '<input value="bar">',
+    },
+    {
+      description:
+        'should render input with value when defaultValue is present',
+      template: () => <input value="bar" defaultValue="foo" />,
+      result: '<input value="bar">',
+    },
+    {
+      description:
+        'should render input when value is not present with defaultValue',
+      template: () => <input defaultValue="foo" />,
+      result: '<input value="foo">',
+    },
+    {
+      description: 'should render input when defaultValue is number',
+      template: () => <input defaultValue={123} />,
+      result: '<input value="123">',
+    },
+    {
+      description: 'should ignore defaultValue when value is 0',
+      template: () => <input value={0} defaultValue="foo" />,
+      result: '<input value="0">',
+    },
+    {
+      description: 'should ignore defaultValue when value is an empty string',
+      template: () => <input defaultValue="foo" value="" />,
+      result: '<input value="">',
+    },
+    {
+      description: 'should render defaultValue when value is null',
+      template: () => <input value={null} defaultValue="foo" />,
+      result: '<input value="foo">',
+    },
+    {
+      description: 'should ignore defaultChecked when checked is false',
+      template: () => (
+        <input type="checkbox" checked={false} defaultChecked={true} />
+      ),
+      result: '<input type="checkbox">',
+    },
+    {
+      description: 'should render input w/defaultChecked falsy, no checked',
+      template: () => <input type="radio" defaultChecked={false} />,
+      result: '<input type="radio">',
+    },
+    {
+      description: 'should render input w/defaultChecked non-boolean value, no checked',
+      // @ts-expect-error XSS test
+      template: () => <input type="radio" defaultChecked="asdasd" />,
+      result: '<input type="radio">',
+    },
+    {
+      description:
+        'should render input of type text with value when input is wrapped',
+      template: () => <WrappedInput value="foo" />,
+      result: '<input type="text" value="foo">',
+    },
+    {
+      description: 'should render select element with selected property',
+      template: () => (
+        <select value="dog">
+          <option value="cat">A cat</option>
+          <option value="dog">A dog</option>
+        </select>
+      ),
+      result:
+        '<select value="dog"><option value="cat">A cat</option><option value="dog" selected>A dog</option></select>',
+    },
+    {
+      description: 'should render the selected option inside a fragment',
+      template: () => (
+        <select value="dog">
+          <>
+            <option value="cat">A cat</option>
+            <option value="dog">A dog</option>
+          </>
+        </select>
+      ),
+      result:
+        '<select value="dog"><option value="cat">A cat</option><option value="dog" selected>A dog</option></select>',
+    },
+    {
+      description: 'should render the selected option inside an optgroup',
+      template: () => (
+        <select value="dog">
+          <optgroup label="Pets">
+            <option value="cat">A cat</option>
+            <option value="dog">A dog</option>
+          </optgroup>
+        </select>
+      ),
+      result:
+        '<select value="dog"><optgroup label="Pets"><option value="cat">A cat</option><option value="dog" selected>A dog</option></optgroup></select>',
+    },
+    {
+      description:
+        'should render the selected option of a component that returns a fragment',
+      template: () => {
+        function Options() {
+          return (
+            <>
+              <option value="cat">A cat</option>
+              <option value="dog">A dog</option>
+            </>
+          );
+        }
+
+        return (
+          <select value="dog">
+            <Options />
+          </select>
+        );
+      },
+      result:
+        '<select value="dog"><option value="cat">A cat</option><option value="dog" selected>A dog</option></select>',
+    },
+    {
+      description:
+        'should render the selected option of a component that returns an option',
+      template: () => {
+        function Option({ value }) {
+          return <option value={value}>{value}</option>;
+        }
+
+        return (
+          <select value="dog">
+            <Option value="cat" />
+            <Option value="dog" />
+          </select>
+        );
+      },
+      result:
+        '<select value="dog"><option value="cat">cat</option><option value="dog" selected>dog</option></select>',
+    },
+    {
+      description: 'should render an option without a select',
+      template: () => <option value="dog">A dog</option>,
+      result: '<option value="dog">A dog</option>',
+    },
+    {
+      description:
+        'should render the options selected by the array value of a multiple select',
+      template: () => (
+        <select multiple value={['cat', 'dog']}>
+          <option value="cat">A cat</option>
+          <option value="dog">A dog</option>
+          <option value="fish">A fish</option>
+        </select>
+      ),
+      result:
+        '<select multiple><option value="cat" selected>A cat</option><option value="dog" selected>A dog</option><option value="fish">A fish</option></select>',
+    },
+    {
+      description: 'should render the option selected by the select defaultValue',
+      template: () => (
+        <select defaultValue="dog">
+          <option value="cat">A cat</option>
+          <option value="dog">A dog</option>
+        </select>
+      ),
+      result:
+        '<select value="dog"><option value="cat">A cat</option><option value="dog" selected>A dog</option></select>',
+    },
+    {
+      description: 'should prefer the select value to its defaultValue',
+      template: () => (
+        <select value="cat" defaultValue="dog">
+          <option value="cat">A cat</option>
+          <option value="dog">A dog</option>
+        </select>
+      ),
+      result:
+        '<select value="cat"><option value="cat" selected>A cat</option><option value="dog">A dog</option></select>',
+    },
+    {
+      description:
+        'should render the children when dangerouslySetInnerHTML is undefined',
+      template: () => (
+        // eslint-disable-next-line inferno/no-danger-with-children
+        <div dangerouslySetInnerHTML={undefined}>fallback</div>
+      ),
+      result: '<div>fallback</div>',
+    },
+    {
+      description:
+        'should render the children when dangerouslySetInnerHTML is null',
+      // eslint-disable-next-line inferno/no-danger-with-children
+      template: () => <div dangerouslySetInnerHTML={null}>fallback</div>,
+      result: '<div>fallback</div>',
+    },
+    {
+      description:
+        'should render dangerouslySetInnerHTML instead of the children like the client',
+      template: () => (
+        // eslint-disable-next-line inferno/no-danger-with-children
+        <div dangerouslySetInnerHTML={{ __html: '<b>html</b>' }}>fallback</div>
+      ),
+      result: '<div><b>html</b></div>',
+    },
+    {
+      description: 'should render the value of a textarea as its content',
+      template: () => <textarea value="hello" />,
+      result: '<textarea>hello</textarea>',
+    },
+    {
+      description: 'should render the defaultValue of a textarea as escaped content',
+      template: () => <textarea defaultValue="a < b" />,
+      result: '<textarea>a &lt; b</textarea>',
+    },
+    {
+      description: 'should prefer the value of a textarea to its defaultValue',
+      template: () => <textarea value="value" defaultValue="default" />,
+      result: '<textarea>value</textarea>',
+    },
+    {
+      description: 'should render a text placeholder',
+      template: () => (
+        <div>
+          <div>{''}</div>
+          <p>Test</p>
+        </div>
+      ),
+      result: '<div><div> </div><p>Test</p></div>',
+    },
+    {
+      description: 'Should render background color',
+      template: () => (
+        <div
+          style={{ 'background-color': 'red', 'border-bottom-color': 'green' }}
+        />
+      ),
+      result:
+        '<div style="background-color:red;border-bottom-color:green;"></div>',
+    },
+    {
+      description: 'Should not render null styles',
+      template: () => (
+        <div
+          style={{
+            'background-color': null as any,
+            'border-bottom-color': null as any,
+          }}
+        />
+      ),
+      result: '<div></div>',
+    },
+    {
+      description:
+        'should render div with text child containing ampersands (XSS script attack)',
+      template: () =>
+        createElement(
+          'div',
+          null,
+          'Hello world <img src="x" onerror="alert(\'&XSS&\')">',
+        ),
+      result:
+        '<div>Hello world &lt;img src=&quot;x&quot; onerror=&quot;alert(&#039;&amp;XSS&amp;&#039;)&quot;&gt;</div>',
+    },
+    {
+      description: 'Should render opacity from a style object',
+      template: () => <div style={{ opacity: 0.8 }} />,
+      result: '<div style="opacity:0.8;"></div>',
+    },
+    {
+      description: 'Should render opacity from a style string',
+      template: () => <div style="opacity:0.8;" />,
+      result: '<div style="opacity:0.8;"></div>',
+    },
+    {
+      description:
+        'Should not render style attribute for an empty style object',
+      template: () => <div style={{}} />,
+      result: '<div></div>',
+    },
+    {
+      description: 'Should not render style attribute when style is null',
+      template: () => <div style={null} />,
+      result: '<div></div>',
+    },
+    {
+      description: 'Should not render style attribute when style is false',
+      template: () => <div style={false as any} />,
+      result: '<div></div>',
+    },
+    {
+      description: 'Should not render style attribute when style is 0',
+      template: () => <div style={0 as any} />,
+      result: '<div></div>',
+    },
+    {
+      description: 'Should not render style attribute when style is true',
+      template: () => <div style={true as any} />,
+      result: '<div></div>',
+    },
+    {
+      description: 'Should render div className as number',
+      template: () => <div className={123 as any} />,
+      result: '<div class="123"></div>',
+    },
+    {
+      description: 'BR should not be closed',
+      template: () => (
+        <div>
+          <br />
+        </div>
+      ),
+      result: '<div><br></div>',
+    },
+    {
+      description: 'You should be able to render an array',
+      template: () => [<p>1</p>, <p>2</p>, <p>3</p>],
+      result: '<p>1</p><p>2</p><p>3</p>',
+    },
+    {
+      description: 'You should be able to render an empty array',
+      template: () => [],
+      result: '<!--!-->',
+    },
+    {
+      description: 'You should be able to render a fragment',
+      template: () => (
+        <>
+          <p>1</p>
+          <p>2</p>
+          <p>3</p>
+        </> /* reset syntax highlighting */
+      ),
+      result: '<p>1</p><p>2</p><p>3</p>',
+    },
+    {
+      description: 'You should be able to render an empty fragment',
+      template: () => <></> /* reset syntax highlighting */,
+      result: '<!--!-->',
+    },
+    {
+      description: 'You should be able to render fragment with single child',
+      template: () => (
+        <>
+          <p>1</p>
+        </>
+      ) /* reset syntax highlighting */,
+      result: '<p>1</p>',
+    },
+  ];
+
+  for (let i = 0, len = testEntries.length; i < len; ++i) {
+    const test = testEntries[i];
+    it(test.description, () => {
+      const vDom = test.template();
+      const output = renderToStaticMarkup(vDom);
+
+      expect(output).toBe(test.result);
+    });
+  }
+
+  describe('Component hook', () => {
+    it('Should allow changing state in CWM', () => {
+      class Another extends Component {
+        constructor(props, context) {
+          super(props, context);
+
+          this.state = {
+            foo: 'bar',
+          };
+        }
+
+        componentWillMount() {
+          this.setState({
+            foo: 'bar2',
+          });
+        }
+
+        render() {
+          return <div>{this.state!.foo}</div>;
+        }
+      }
+
+      class Tester extends Component {
+        constructor(props, context) {
+          super(props, context);
+
+          this.state = {
+            foo: 'bar',
+          };
+        }
+
+        componentWillMount() {
+          this.setState({
+            foo: 'bar2',
+          });
+        }
+
+        render() {
+          return (
+            <div>
+              {this.state!.foo}
+              <Another />
+            </div>
+          );
+        }
+      }
+
+      const vDom = <Tester />;
+
+      const output = renderToStaticMarkup(vDom);
+
+      expect(output).toBe('<div>bar2<div>bar2</div></div>');
+    });
+  });
+
+  describe('Component string output', () => {
+    it('Should render single text node', () => {
+      class Foobar extends Component {
+        render() {
+          return 'foo';
+        }
+      }
+
+      const output = renderToString(
+        <div>
+          <Foobar />
+        </div>,
+      );
+
+      expect(output).toBe('<div>foo</div>');
+    });
+
+    it('Should render single text node using state', () => {
+      class Foobar extends Component {
+        render() {
+          return this.state!.text;
+        }
+
+        componentWillMount() {
+          this.setState({
+            text: 'foo',
+          });
+        }
+      }
+
+      const output = renderToString(
+        <div>
+          <Foobar />
+        </div>,
+      );
+
+      expect(output).toBe('<div>foo</div>');
+    });
+
+    it('Should render single (number)text node using state', () => {
+      class Foobar extends Component {
+        render() {
+          return this.state!.text;
+        }
+
+        componentWillMount() {
+          this.setState({
+            text: 33,
+          });
+        }
+      }
+
+      const output = renderToString(
+        <div>
+          <Foobar />
+        </div>,
+      );
+
+      expect(output).toBe('<div>33</div>');
+    });
+
+    it('Should render comment when component returns invalid node', () => {
+      function Foobar() {
+        return null;
+      }
+
+      const output = renderToString(
+        <div>
+          <Foobar />
+        </div>,
+      );
+
+      expect(output).toBe('<div><!--!--></div>');
+    });
+
+    it('Should render comment when Class Component returns null', () => {
+      class Foobar extends Component {
+        render() {
+          return null;
+        }
+      }
+
+      const output = renderToString(
+        <div>
+          <Foobar />
+        </div>,
+      );
+
+      expect(output).toBe('<div><!--!--></div>');
+    });
+
+    it('Should render single text node Functional Component', () => {
+      function Foobar() {
+        return 'foo';
+      }
+
+      const output = renderToString(
+        <div>
+          <Foobar />
+        </div>,
+      );
+
+      expect(output).toBe('<div>foo</div>');
+    });
+
+    it('Should render single (number)text node Functional Component', () => {
+      function Foobar() {
+        return 2;
+      }
+
+      const output = renderToString(
+        <div>
+          <Foobar />
+        </div>,
+      );
+
+      expect(output).toBe('<div>2</div>');
+    });
+
+    it('Should render checked attribute for input when there is no checked in props', () => {
+      class Foobar extends Component {
+        render() {
+          // @ts-expect-error
+          // eslint-disable-next-line inferno/no-unknown-property
+          return <input count={1} type="checkbox" defaultChecked={true} />;
+        }
+      }
+
+      const output = renderToString(
+        <div>
+          <Foobar />
+        </div>,
+      );
+
+      expect(output).toBe(
+        '<div><input count="1" type="checkbox" checked="true"></div>',
+      );
+    });
+
+    it('Should throw error if invalid object is sent to renderToString', () => {
+      expect(() => renderToString({ failure: 'guaranteed' })).toThrow();
+      expect(() => renderToString(2)).toThrow();
+    });
+
+    it('Should re-use Css property names from cache when its used multiple times', () => {
+      expect(
+        renderToString(
+          <div style={{ 'background-color': 'red' }}>
+            <div style={{ 'background-color': 'red' }} />
+          </div>,
+        ),
+      ).toEqual(
+        '<div style="background-color:red;"><div style="background-color:red;"></div></div>',
+      );
+    });
+
+    it('text nodes should match 1:1 after hydration', () => {
+      class LinkComponent extends Component {
+        render() {
+          return (
+            <a
+              target="_blank"
+              rel="noopener noreferrer"
+              href="https://github.com/infernojs/create-inferno-app"
+            >
+              create-inferno-app
+            </a>
+          );
+        }
+      }
+      const container = document.createElement('div');
+      const version = '4.0.0-21';
+      const renderedString = renderToString(
+        <div className="built">
+          Website built with Inferno {version} using <LinkComponent />
+        </div>,
+      );
+      expect(renderedString).toEqual(
+        '<div class="built">Website built with Inferno 4.0.0-21 using <a target="_blank" rel="noopener noreferrer" href="https://github.com/infernojs/create-inferno-app">create-inferno-app</a></div>',
+      );
+
+      container.innerHTML = renderedString;
+
+      const AnchorNode = container.querySelector('a');
+      const wrapperDiv = container.firstChild!;
+
+      function WrapperComponent() {
+        return (
+          <div className="built">
+            Website built with Inferno {version} using <LinkComponent />
+          </div>
+        );
+      }
+
+      hydrate(<WrapperComponent />, container);
+      expect(container.firstChild).toBe(wrapperDiv);
+      expect(wrapperDiv.childNodes.length).toBe(4);
+      expect(wrapperDiv.childNodes[0].nodeValue).toBe(
+        'Website built with Inferno ',
+      );
+      expect(wrapperDiv.childNodes[1].nodeValue).toBe('4.0.0-21');
+      expect(wrapperDiv.childNodes[2].nodeValue).toBe(' using ');
+      expect(wrapperDiv.childNodes[3]).toBe(AnchorNode);
+    });
+
+    it('Should render and hydrate nested fragments with null and text children', () => {
+      const vNode = (
+        <div>
+          {createFragment(
+            [
+              <div>Lets go!</div>,
+              null,
+              createFragment(
+                [<div>World</div>, 'Of', <em>Fragments</em>],
+                ChildFlags.UnknownChildren,
+              ),
+              'text node',
+            ],
+            ChildFlags.UnknownChildren,
+          )}
+        </div>
+      );
+      const renderedString = renderToString(vNode);
+
+      expect(renderedString).toBe(
+        '<div><div>Lets go!</div><div>World</div>Of<em>Fragments</em>text node</div>',
+      );
+
+      const container = document.createElement('div');
+
+      container.innerHTML = renderedString;
+
+      const emTag = container.querySelector('em');
+
+      hydrate(vNode, container);
+
+      expect(container.innerHTML).toBe(
+        '<div><div>Lets go!</div><div>World</div>Of<em>Fragments</em>text node</div>',
+      );
+      expect(container.querySelector('em')).toBe(emTag);
+    });
+
+    it('Should render and hydrate nested fragments including a component returning a fragment', () => {
+      class Fragmented extends Component {
+        render() {
+          return createFragment(
+            [<div id="m">More</div>, 'Fragments'],
+            ChildFlags.UnknownChildren,
+          );
+        }
+      }
+
+      const vNode = (
+        <div>
+          {createFragment(
+            [
+              <div>Lets go!</div>,
+              <Fragmented />,
+              null,
+              createFragment(
+                [<div>World</div>, 'Of', <em>Fragments</em>],
+                ChildFlags.UnknownChildren,
+              ),
+              'text node',
+              createFragment(
+                [null, 'Go', <em>Code</em>],
+                ChildFlags.UnknownChildren,
+              ),
+            ],
+            ChildFlags.UnknownChildren,
+          )}
+        </div>
+      );
+      const renderedString = renderToString(vNode);
+
+      expect(renderedString).toBe(
+        '<div><div>Lets go!</div><div id="m">More</div>Fragments<div>World</div>Of<em>Fragments</em>text nodeGo<em>Code</em></div>',
+      );
+
+      const container = document.createElement('div');
+
+      container.innerHTML = renderedString;
+
+      const moreDiv = container.querySelector('#m');
+      const emTag = container.querySelector('em');
+
+      hydrate(vNode, container);
+
+      expect(container.innerHTML).toBe(
+        '<div><div>Lets go!</div><div id="m">More</div>Fragments<div>World</div>Of<em>Fragments</em>text nodeGo<em>Code</em></div>',
+      );
+      expect(container.querySelector('em')).toBe(emTag);
+      expect(container.querySelector('#m')).toBe(moreDiv);
+    });
+
+    it('Should be possible to use getDerivedStateFromProps', () => {
+      class Test extends Component {
+        constructor(props) {
+          super(props);
+
+          this.state = {
+            value: 0,
+          };
+        }
+
+        static getDerivedStateFromProps(_props, state) {
+          return {
+            value: state.value + 1,
+          };
+        }
+
+        render() {
+          return <div>{this.state!.value}</div>;
+        }
+      }
+
+      expect(renderToString(<Test />)).toBe('<div>1</div>');
+    });
+  });
+
+  // Renders the same tree with all three server renderers and on the client
+  describe('Class component setup matches the client', () => {
+    function streamToString(stream): Promise<string> {
+      return new Promise((resolve, reject) => {
+        let html = '';
+
+        stream.on('data', (chunk) => {
+          html += chunk;
+        });
+        stream.on('error', reject);
+        stream.on('end', () => resolve(html));
+      });
+    }
+
+    async function expectServerToMatchClient(template: () => any) {
+      const container = document.createElement('div');
+
+      render(template(), container);
+      const client = container.innerHTML;
+      render(null, container);
+
+      expect(renderToString(template())).toBe(client);
+      expect(await streamToString(streamAsString(template()))).toBe(client);
+      expect(await streamToString(streamQueueAsString(template()))).toBe(
+        client,
+      );
+    }
+
+    beforeEach(() => {
+      spyOn(console, 'error'); // legacy lifecycle warnings of the client
+    });
+
+    it('Should not call componentWillMount of a component with getSnapshotBeforeUpdate', async () => {
+      class Snapshot extends Component<unknown, { text: string }> {
+        public state = { text: 'initial' };
+
+        public componentWillMount() {
+          this.setState({ text: 'componentWillMount' });
+        }
+
+        public getSnapshotBeforeUpdate() {
+          return null;
+        }
+
+        public componentDidUpdate() {}
+
+        public render() {
+          return <div>{this.state.text}</div>;
+        }
+      }
+
+      await expectServerToMatchClient(() => <Snapshot />);
+    });
+
+    it('Should call getChildContext after componentWillMount', async () => {
+      function Consumer(_props, context) {
+        return <span>{context.theme}</span>;
+      }
+
+      class Provider extends Component<unknown, { theme: string }> {
+        public state = { theme: 'light' };
+
+        public componentWillMount() {
+          this.setState({ theme: 'dark' });
+        }
+
+        public getChildContext() {
+          return { theme: this.state.theme };
+        }
+
+        public render() {
+          return <Consumer />;
+        }
+      }
+
+      await expectServerToMatchClient(() => <Provider />);
+    });
+
+    it('Should not give a component its own child context', async () => {
+      class Provider extends Component {
+        public getChildContext() {
+          return { theme: 'dark' };
+        }
+
+        public render() {
+          return <span>{String(this.context.theme)}</span>;
+        }
+      }
+
+      await expectServerToMatchClient(() => (
+        <div>
+          <Provider />
+        </div>
+      ));
+    });
+
+    it('Should give a root component an empty context', async () => {
+      class Root extends Component {
+        public render() {
+          return <span>{String(this.context.theme)}</span>;
+        }
+      }
+
+      await expectServerToMatchClient(() => <Root />);
+    });
+
+    it('Should give props to a component whose constructor does not pass them to super', async () => {
+      class NoProps extends Component<{ text?: string }> {
+        constructor() {
+          super();
+        }
+
+        public render() {
+          return <span>{this.props.text}</span>;
+        }
+      }
+
+      await expectServerToMatchClient(() => <NoProps text="props" />);
+      await expectServerToMatchClient(() => <NoProps />);
+    });
+  });
+});

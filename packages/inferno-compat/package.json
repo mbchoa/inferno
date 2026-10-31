@@ -1,7 +1,8 @@
 {
   "name": "inferno-compat",
-  "version": "8.0.1",
+  "version": "10.0.0",
   "license": "MIT",
+  "type": "module",
   "description": "Provides a compatibility with React codebases",
   "author": {
     "name": "Dominic Gannaway",
@@ -17,16 +18,24 @@
   },
   "homepage": "https://github.com/infernojs/inferno#readme",
   "files": [
-    "index.js",
+    "index.cjs",
     "prop-types.js",
     "lib",
     "dist/",
     "README.md",
     "package.json"
   ],
-  "main": "index.js",
-  "module": "dist/index.esm.js",
-  "dev:module": "dist/index.dev.esm.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./index.cjs"
+    },
+    "./dist/index.dev.mjs": "./dist/index.dev.mjs",
+    "./dist/index.mjs": "./dist/index.mjs"
+  },
+  "module": "dist/index.mjs",
+  "dev:module": "dist/index.dev.mjs",
   "typings": "dist/index.d.ts",
   "keywords": [
     "babel",
@@ -38,18 +47,17 @@
     "vdom"
   ],
   "dependencies": {
-    "inferno": "8.0.1",
-    "inferno-clone-vnode": "8.0.1",
-    "inferno-create-class": "8.0.1",
-    "inferno-create-element": "8.0.1",
-    "inferno-extras": "8.0.1",
-    "inferno-hydrate": "8.0.1"
+    "inferno": "workspace:*",
+    "inferno-clone-vnode": "workspace:*",
+    "inferno-create-element": "workspace:*",
+    "inferno-extras": "workspace:*",
+    "inferno-hydrate": "workspace:*",
+    "inferno-shared": "workspace:*"
   },
   "devDependencies": {
-    "inferno-hyperscript": "8.0.1",
-    "inferno-shared": "8.0.1",
-    "inferno-test-utils": "8.0.1",
-    "inferno-vnode-flags": "8.0.1"
+    "inferno-hyperscript": "workspace:*",
+    "inferno-test-utils": "workspace:*",
+    "inferno-vnode-flags": "workspace:*"
   },
   "rollup": {
     "bundledDependencies": [
@@ -60,5 +68,6 @@
     "moduleGlobals": {
       "inferno": "Inferno"
     }
-  }
+  },
+  "gitHead": "930f16301f6cdaa85e48641eed9ef49f799fc68a"
 }

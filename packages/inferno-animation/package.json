@@ -1,8 +1,9 @@
 {
   "name": "inferno-animation",
-  "version": "8.0.1",
+  "version": "10.0.0",
   "license": "MIT",
-  "description": "Animation helpers inferno. This package can be used to reuse server side rendered html",
+  "type": "module",
+  "description": "Helper components and utils to add CSS animations to Inferno apps",
   "author": {
     "name": "Sebastian Ware",
     "email": "sebastian@urbantalk.se",
@@ -18,14 +19,24 @@
   },
   "homepage": "https://github.com/infernojs/inferno#readme",
   "files": [
-    "index.js",
+    "index.cjs",
+    "index.css",
     "dist/",
     "README.md",
     "package.json"
   ],
-  "main": "index.js",
-  "module": "dist/index.esm.js",
-  "dev:module": "dist/index.dev.esm.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./index.cjs"
+    },
+    "./dist/index.dev.mjs": "./dist/index.dev.mjs",
+    "./dist/index.mjs": "./dist/index.mjs",
+    "./index.css": "./index.css"
+  },
+  "module": "dist/index.mjs",
+  "dev:module": "dist/index.dev.mjs",
   "typings": "dist/index.d.ts",
   "keywords": [
     "babel",
@@ -39,13 +50,13 @@
     "css"
   ],
   "dependencies": {
-    "inferno": "8.0.1"
+    "inferno": "workspace:*"
   },
   "devDependencies": {
-    "inferno-create-element": "8.0.1",
-    "inferno-shared": "8.0.1",
-    "inferno-utils": "8.0.1",
-    "inferno-vnode-flags": "8.0.1"
+    "inferno-create-element": "workspace:*",
+    "inferno-shared": "workspace:*",
+    "inferno-utils": "workspace:*",
+    "inferno-vnode-flags": "workspace:*"
   },
   "rollup": {
     "bundledDependencies": [
@@ -56,5 +67,6 @@
     "moduleGlobals": {
       "inferno": "Inferno"
     }
-  }
+  },
+  "gitHead": "930f16301f6cdaa85e48641eed9ef49f799fc68a"
 }

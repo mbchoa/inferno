@@ -1,42 +1,61 @@
-import { isFunction, warning } from 'inferno-shared';
+import { isFunction } from 'inferno-shared';
 
-declare global {
-  // Setting `window.__DEBUG_ANIMATIONS__ = true;` disables animation timeouts
-  // allowing breakpoints in animations for debugging.
-  // https://mariusschulz.com/blog/declaring-global-variables-in-typescript
-  var __INFERNO_ANIMATION_DEBUG__: Boolean;
+export interface Dimensions {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
 }
 
-function filterEmpty(c) {
+function filterEmpty(c: string): boolean {
   return c !== '';
 }
 
-function getClassNameList(className: string) {
+function getClassNameList(className: string): string[] {
   return className.split(' ').filter(filterEmpty);
 }
 
-export function addClassName(node: HTMLElement, className: string) {
+export function addClassName(
+  node: HTMLElement | SVGElement,
+  className: string,
+): void {
+  if (className.indexOf(' ') === -1) {
+    if (className !== '') node.classList.add(className);
+    return;
+  }
   const classNameList = getClassNameList(className);
 
-  for (let i = 0; i < classNameList.length; i++) {
-    node.classList.add(classNameList[i]);
+  for (let i = 0, len = classNameList.length; i < len; ++i) {
+    const name = classNameList[i];
+    node.classList.add(name);
   }
 }
 
-export function removeClassName(node: HTMLElement, className: string) {
+export function removeClassName(
+  node: HTMLElement | SVGElement,
+  className: string,
+): void {
+  if (className.indexOf(' ') === -1) {
+    if (className !== '') node.classList.remove(className);
+    return;
+  }
   const classNameList = getClassNameList(className);
 
-  for (let i = 0; i < classNameList.length; i++) {
-    node.classList.remove(classNameList[i]);
+  for (let i = 0, len = classNameList.length; i < len; ++i) {
+    const name = classNameList[i];
+    node.classList.remove(name);
   }
 }
 
-export function forceReflow() {
+export function forceReflow(): number {
   return document.body.clientHeight;
 }
 
 // A quicker version used in pre_initialize
-export function resetDisplay(node: HTMLElement, value?: string) {
+export function resetDisplay(
+  node: HTMLElement | SVGElement,
+  value?: string,
+): void {
   if (value !== undefined) {
     node.style.setProperty('display', value);
   } else {
@@ -45,7 +64,10 @@ export function resetDisplay(node: HTMLElement, value?: string) {
   }
 }
 
-export function setDisplay(node: HTMLElement, value?: string) {
+export function setDisplay(
+  node: HTMLElement | SVGElement,
+  value?: string,
+): string {
   const oldVal = node.style.getPropertyValue('display');
 
   if (oldVal !== value) {
@@ -59,79 +81,260 @@ export function setDisplay(node: HTMLElement, value?: string) {
   return oldVal;
 }
 
-function _cleanStyle(node: HTMLElement) {
+function _cleanStyle(node: HTMLElement | SVGElement): void {
   if (!node.style) {
     // https://developer.mozilla.org/en-US/docs/Web/API/Element/removeAttribute
     node.removeAttribute('style');
   }
 }
 
-export function getDimensions(node: HTMLElement) {
-  const tmpDisplay = node.style.getPropertyValue('display');
+export function getDimensions(node: HTMLElement | SVGElement): Dimensions {
+  let rect = node.getBoundingClientRect();
 
   // The `display: none;` workaround was added to support Bootstrap animations in
   // https://github.com/jhsware/inferno-bootstrap/blob/be4a17bff5e785b993a66a2927846cd463fecae3/src/Modal/AnimateModal.js
   // we should consider deprecating this, or providing a different solution for
-  // those who only do normal animations.
-  const isDisplayNone = window.getComputedStyle(node).getPropertyValue('display') === 'none';
-  if (isDisplayNone) {
+  // those who only do normal animations. Only an element without a box can be hidden that way.
+  if (
+    rect.width === 0 &&
+    rect.height === 0 &&
+    window.getComputedStyle(node).getPropertyValue('display') === 'none'
+  ) {
+    const tmpDisplay = node.style.getPropertyValue('display');
     node.style.setProperty('display', 'block');
-  }
-
-  const tmp = node.getBoundingClientRect();
-
-  if (isDisplayNone) {
-    // node.style.display = tmpDisplay
+    rect = node.getBoundingClientRect();
     node.style.setProperty('display', tmpDisplay);
     _cleanStyle(node);
   }
 
   return {
-    height: tmp.height,
-    width: tmp.width,
-    x: tmp.x,
-    y: tmp.y
+    height: rect.height,
+    width: rect.width,
+    x: rect.x,
+    y: rect.y,
   };
 }
 
-export function getOffsetPosition(node: HTMLElement) {
-  const { x, y } = node.getBoundingClientRect();
-  return { x, y };
+export function getGeometry(node: HTMLElement | SVGElement): DOMRect {
+  return node.getBoundingClientRect();
 }
 
-export function getGeometry(node: HTMLElement) {
-  const { x, y, width, height } = node.getBoundingClientRect();
-  return { x, y, width, height };
+// Whether the element has a box: a hidden one measures as an empty box at the viewport origin
+export function hasBox(
+  node: HTMLElement | SVGElement,
+  geometry: DOMRect,
+): boolean {
+  return (
+    geometry.width !== 0 ||
+    geometry.height !== 0 ||
+    node.getClientRects().length !== 0
+  );
 }
 
-export function setTransform(node: HTMLElement, x: number, y: number, scaleX: number = 1, scaleY: number = 1) {
-  const doScale = scaleX !== 1 || scaleY !== 1;
-  if (doScale) {
-    node.style.transformOrigin = '0 0';
-    node.style.transform = 'translate(' + x + 'px, ' + y + 'px) scale(' + scaleX + ', ' + scaleY + ')';
-  } else {
-    node.style.transform = 'translate(' + x + 'px, ' + y + 'px)';
+/**
+ * A 2D transform [a, b, c, d, e, f]. Its linear part [a, b, c, d] maps an offset (x, y) to
+ * (a * x + c * y, b * x + d * y); e and f are its translation, which products leave out.
+ */
+export type Linear = readonly number[];
+
+export const IDENTITY: Linear = [1, 0, 0, 1, 0, 0];
+
+export function multiply(m: Linear, n: Linear): Linear {
+  return [
+    m[0] * n[0] + m[2] * n[1],
+    m[1] * n[0] + m[3] * n[1],
+    m[0] * n[2] + m[2] * n[3],
+    m[1] * n[2] + m[3] * n[3],
+  ];
+}
+
+// The offset that m maps to (x, y), or null when m flattens the plane
+export function solve(
+  m: Linear,
+  x: number,
+  y: number,
+): { x: number; y: number } | null {
+  const determinant = m[0] * m[3] - m[1] * m[2];
+  if (Math.abs(determinant) < 1e-9) return null;
+  return {
+    x: (m[3] * x - m[2] * y) / determinant,
+    y: (m[0] * y - m[1] * x) / determinant,
+  };
+}
+
+// A computed transform, which is a matrix or none
+export function matrix(value: string | undefined): Linear {
+  const match = /^matrix(3d)?\(([^)]*)\)$/.exec(value || '');
+  if (match === null) return IDENTITY;
+  const v = match[2].split(',').map(Number);
+  return match[1] ? [v[0], v[1], v[4], v[5], v[12], v[13]] : v;
+}
+
+// The computed rotate property, when it rotates around the z axis. Computed angles are in degrees.
+function rotateLinear(value: string | undefined): Linear {
+  if (!value || value === 'none') return IDENTITY;
+  const match = /^(?:z |0 0 1 )?(-?[\d.e+-]+)deg$/.exec(value || '');
+  if (match === null) return IDENTITY;
+  const angle = (Number(match[1]) * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return [cos, sin, -sin, cos];
+}
+
+function scaleLinear(value: string | undefined): Linear {
+  if (!value || value === 'none') return IDENTITY;
+  const [x, y = x] = value.split(' ').map(Number);
+  return Number.isFinite(x) && Number.isFinite(y) ? [x, 0, 0, y] : IDENTITY;
+}
+
+/**
+ * The linear part of the individual rotate and scale properties, which apply before the transform
+ * property, so they also apply to an offset written into the transform.
+ */
+export function ownLinear(style: CSSStyleDeclaration): Linear {
+  const rotate = rotateLinear(style.rotate);
+  const scale = scaleLinear(style.scale);
+  if (rotate === IDENTITY) return scale;
+  if (scale === IDENTITY) return rotate;
+  return multiply(rotate, scale);
+}
+
+/**
+ * How the transforms around the children of parent map their offsets to the viewport. For SVG the
+ * screen CTM includes the viewBox, the SVG transforms and the CSS transforms of HTML ancestors.
+ * The parent may be a shadow root or a document fragment, and the elements around a shadow root
+ * are those around its host.
+ */
+export function parentSpace(parent: Node): Linear {
+  let space = IDENTITY;
+  for (
+    let node: Node | null = parent;
+    node !== null;
+    node = node.parentNode || (node as ShadowRoot).host || null
+  ) {
+    if (node.nodeType !== 1) continue;
+    if (isFunction((node as SVGGraphicsElement).getScreenCTM)) {
+      const ctm = (node as SVGGraphicsElement).getScreenCTM();
+      return ctm === null
+        ? space
+        : multiply([ctm.a, ctm.b, ctm.c, ctm.d], space);
+    }
+    const style = window.getComputedStyle(node as Element);
+    space = multiply(
+      multiply(ownLinear(style), matrix(style.transform)),
+      space,
+    );
+  }
+  return space;
+}
+
+/**
+ * An inline declaration saved before an animation writes the property, and the value the
+ * animation wrote.
+ */
+export interface SavedStyle {
+  property: string;
+  value: string;
+  priority: string;
+  applied: string;
+  appliedPriority: string;
+}
+
+export function saveStyles(
+  style: CSSStyleDeclaration,
+  properties: string[],
+): SavedStyle[] {
+  // An element without inline declarations has none to read
+  if (style.length === 0) {
+    return properties.map((property) => ({
+      property,
+      value: '',
+      priority: '',
+      applied: '',
+      appliedPriority: '',
+    }));
+  }
+  return properties.map((property) => ({
+    property,
+    value: style.getPropertyValue(property),
+    priority: style.getPropertyPriority(property),
+    applied: '',
+    appliedPriority: '',
+  }));
+}
+
+// Records the values the animation has written, with the priority it wrote them with. A write
+// that left no declaration has no priority either.
+export function markApplied(
+  style: CSSStyleDeclaration,
+  saved: SavedStyle[],
+  priority = '',
+): void {
+  for (let i = 0, len = saved.length; i < len; ++i) {
+    const entry = saved[i];
+    entry.applied = style.getPropertyValue(entry.property);
+    entry.appliedPriority = entry.applied === '' ? '' : priority;
   }
 }
 
-export function clearTransform(node: HTMLElement) {
-  node.style.transform = '';
-  node.style.transformOrigin = '';
+/**
+ * Restores the saved declarations and empties saved. A property the application changed after
+ * the animation wrote it keeps the application's value.
+ */
+export function restoreStyles(
+  style: CSSStyleDeclaration,
+  saved: SavedStyle[],
+): void {
+  for (let i = 0, len = saved.length; i < len; ++i) {
+    const entry = saved[i];
+    if (
+      style.getPropertyValue(entry.property) === entry.applied &&
+      style.getPropertyPriority(entry.property) === entry.appliedPriority
+    ) {
+      if (entry.value)
+        style.setProperty(entry.property, entry.value, entry.priority);
+      else style.removeProperty(entry.property);
+    }
+  }
+  saved.length = 0;
 }
 
-export function setDimensions(node: HTMLElement, width: number, height: number) {
+export function setTransform(
+  node: HTMLElement | SVGElement,
+  x: number,
+  y: number,
+  scaleX: number = 1,
+  scaleY: number = 1,
+): void {
+  const doScale = scaleX !== 1 || scaleY !== 1;
+  if (doScale) {
+    node.style.transformOrigin = '0 0';
+    node.style.transform = `translate(${x}px,${y}px) scale(${scaleX},${scaleY})`;
+  } else {
+    node.style.transform = `translate(${x}px,${y}px)`;
+  }
+}
+
+export function setDimensions(
+  node: HTMLElement | SVGElement,
+  width: number,
+  height: number,
+): void {
   node.style.width = width + 'px';
   node.style.height = height + 'px';
 }
 
-export function clearDimensions(node: HTMLElement) {
+export function clearDimensions(node: HTMLElement | SVGElement): void {
   node.style.width = node.style.height = '';
 }
 
-function _getMaxTransitionDuration(nodes) {
+function _getMaxTransitionDuration(nodes): {
+  maxDuration: number;
+  nrofTransitions: number;
+} {
   let nrofTransitions = 0;
   let maxDuration = 0;
-  for (let i = 0; i < nodes.length; i++) {
+  for (let i = 0, len = nodes.length; i < len; ++i) {
     const node = nodes[i];
     if (!node) continue;
 
@@ -140,14 +343,15 @@ function _getMaxTransitionDuration(nodes) {
     const del = cs.getPropertyValue('transition-delay').split(',');
     const props = cs.getPropertyValue('transition-property').split(',');
 
-    for (const prop in props) {
+    for (let j = 0, len2 = props.length; j < len2; ++j) {
+      const prop = props[j];
       const fixedProp = prop.trim();
       if (fixedProp[0] === '-') {
         const tmp = fixedProp.split('-').splice(2).join('-');
         // Since I increase number of transition events to expect by
         // number of durations found I need to remove browser prefix
         // variations of the same property
-        if (fixedProp.indexOf(tmp) >= 0) {
+        if (fixedProp.includes(tmp)) {
           nrofTransitions--;
         }
       }
@@ -172,40 +376,31 @@ function _getMaxTransitionDuration(nodes) {
 
   return {
     maxDuration,
-    nrofTransitions
+    nrofTransitions,
   };
 }
 
-export const transitionEndName: string = (function () {
-  if (typeof document === 'undefined') return '';
-
-  const elementStyle = document.createElement('div').style;
-  // tslint:disable:object-literal-sort-keys
-  const transitions = {
-    transition: 'transitionend',
-    OTransition: 'oTransitionEnd',
-    MozTransition: 'transitionend',
-    WebkitTransition: 'webkitTransitionEnd'
+function setAnimationTimeout(
+  onTransitionEnd,
+  rootNode,
+  maxDuration,
+): () => void {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const start = () => {
+    timeout = setTimeout(
+      () => onTransitionEnd({ target: rootNode, timeout: true }),
+      maxDuration === 0 ? 0 : Math.round(maxDuration * 1000) + 100,
+    );
   };
-  // tslint:enable:object-literal-sort-keys
-
-  for (const t in transitions) {
-    if (elementStyle[t] !== undefined) {
-      return transitions[t];
-    }
-  }
-})();
-
-function setAnimationTimeout(onTransitionEnd, rootNode, maxDuration) {
-  if (rootNode.nodeName === 'IMG' && !(rootNode as any).complete) {
-    // Image animations should wait for loaded until the timeout is started, otherwise animation will be cut short
-    // due to loading delay
-    rootNode.addEventListener('load', () => {
-      setTimeout(() => onTransitionEnd({ target: rootNode, timeout: true }), maxDuration === 0 ? 0 : Math.round(maxDuration * 1000) + 100);
-    });
+  if (rootNode.nodeName === 'IMG' && !rootNode.complete) {
+    rootNode.addEventListener('load', start, { once: true });
   } else {
-    setTimeout(() => onTransitionEnd({ target: rootNode, timeout: true }), maxDuration === 0 ? 0 : Math.round(maxDuration * 1000) + 100);
+    start();
   }
+  return () => {
+    clearTimeout(timeout);
+    rootNode.removeEventListener('load', start);
+  };
 }
 
 /**
@@ -215,8 +410,12 @@ function setAnimationTimeout(onTransitionEnd, rootNode, maxDuration) {
  *
  * @param nodes a list of nodes that have transitions that are part of this animation
  * @param callback callback when all transitions of participating nodes are completed
+ * @returns Cancel listeners and the timeout without invoking the callback.
  */
-export function registerTransitionListener(nodes: HTMLElement[], callback: Function) {
+export function registerTransitionListener(
+  nodes: Array<HTMLElement | SVGElement>,
+  callback: () => void,
+): () => void {
   const rootNode = nodes[0];
 
   /**
@@ -227,7 +426,7 @@ export function registerTransitionListener(nodes: HTMLElement[], callback: Funct
   let nrofTransitionsLeft = transitionDuration.nrofTransitions;
   let done = false;
 
-  const onTransitionEnd = (event) => {
+  const onTransitionEnd = (event): void => {
     // Make sure this is an actual event
     if (!event || done) {
       return;
@@ -236,9 +435,10 @@ export function registerTransitionListener(nodes: HTMLElement[], callback: Funct
     if (!event.timeout) {
       // Make sure it isn't a child that is triggering the event
       let goAhead = false;
-      for (let i = 0; i < nodes.length; i++) {
+      for (let i = 0, len = nodes.length; i < len; ++i) {
+        const node = nodes[i];
         // Note: Check for undefined nodes (happens when an animated el doesn't have children)
-        if (nodes[i] !== undefined && event.target === nodes[i]) {
+        if (node !== undefined && event.target === node) {
           goAhead = true;
           break;
         }
@@ -252,55 +452,262 @@ export function registerTransitionListener(nodes: HTMLElement[], callback: Funct
     }
 
     // This is it...
-    done = true;
-
-    /**
-     * Perform cleanup
-     */
-    rootNode.removeEventListener(transitionEndName, onTransitionEnd, false);
+    cancel();
     if (isFunction(callback)) {
       callback();
     }
   };
 
-  rootNode.addEventListener(transitionEndName, onTransitionEnd, false);
+  // if element gets removed from the DOM before transition is triggered, browser will raise transitioncancel event
+  rootNode.addEventListener('transitioncancel', onTransitionEnd, false);
+  rootNode.addEventListener('transitionend', onTransitionEnd, false);
 
-  // Fallback if transitionend fails
-  // This is disabled during debug so we can set breakpoints
-  // WARNING: If the callback isn't called, the DOM nodes won't be removed
-  if (!(process.env.NODE_ENV !== 'production' && isDebugAnimationsSet())) {
-    setAnimationTimeout(onTransitionEnd, rootNode, maxDuration);
-  } else if (process.env.NODE_ENV !== 'production') {
-    warning("You are in animation debugging mode and fallback timeouts aren't set. DOM nodes could be left behind.");
+  const cancelTimeout = setAnimationTimeout(
+    onTransitionEnd,
+    rootNode,
+    maxDuration,
+  );
+  function cancel(): void {
+    if (done) return;
+    done = true;
+    cancelTimeout();
+    rootNode.removeEventListener('transitioncancel', onTransitionEnd, false);
+    rootNode.removeEventListener('transitionend', onTransitionEnd, false);
   }
+  return cancel;
 }
 
-function isDebugAnimationsSet() {
-  return window.__INFERNO_ANIMATION_DEBUG__ === true;
+// A computed time in seconds; computed styles serialize in seconds, "ms" is accepted as well
+function parseTime(value: string | undefined): number {
+  if (value === undefined) return 0;
+  const time = parseFloat(value);
+  if (Number.isNaN(time)) return 0;
+  return value.trimEnd().endsWith('ms') ? time / 1000 : time;
 }
 
-export function incrementMoveCbCount(node) {
-  let curr = parseInt(node.dataset.moveCbCount, 10);
-  if (isNaN(curr)) {
-    curr = 1;
-  } else {
-    curr++;
+// The first entry of a computed list
+function firstEntry(list: string): string {
+  const comma = list.indexOf(',');
+  return comma === -1 ? list : list.slice(0, comma);
+}
+const NO_ENTRIES: Array<[string, number]> = [];
+
+/**
+ * The properties that the computed transition lists of style can transition: entries with a
+ * positive combined duration (a shorter duration or delay list repeats; a property listed again
+ * replaces the earlier entry), with their combined durations in seconds. Null when the lists can't
+ * be read.
+ */
+export function transitionEntries(
+  style: CSSStyleDeclaration,
+): Array<[string, number]> | null {
+  const properties = style.getPropertyValue('transition-property');
+  if (!properties) return null;
+  const durationList = style.getPropertyValue('transition-duration');
+  const delayList = style.getPropertyValue('transition-delay');
+  // One property, as in most computed styles: only the first duration and delay apply
+  if (properties.indexOf(',') === -1) {
+    const combined =
+      Math.max(parseTime(firstEntry(durationList)), 0) +
+      parseTime(firstEntry(delayList));
+    return combined > 0 ? [[properties.trim(), combined]] : NO_ENTRIES;
   }
-  node.dataset.moveCbCount = curr;
-  return curr;
+  const names = properties.split(',');
+  const durations = durationList.split(',');
+  const delays = delayList.split(',');
+  const entries: Array<[string, number]> = [];
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i].trim();
+    let repeated = false;
+    for (let j = i + 1; j < names.length && !repeated; j++) {
+      repeated = names[j].trim() === name;
+    }
+    if (repeated) continue;
+    const combined =
+      Math.max(parseTime(durations[i % durations.length]), 0) +
+      parseTime(delays[i % delays.length]);
+    if (combined > 0) entries.push([name, combined]);
+  }
+  return entries;
 }
 
-export function decrementMoveCbCount(node) {
-  let curr = parseInt(node.dataset.moveCbCount, 10);
-  if (isNaN(curr)) {
-    curr = 0;
-  } else {
-    curr--;
-    if (curr === 0) {
-      node.dataset.moveCbCount = '';
-    } else {
-      node.dataset.moveCbCount = curr;
+// The number of transitions that style can run and the longest of them in seconds, which
+// runnableTransitions leaves in these. Lists that can't be read count as one transition of
+// unknown duration, as before.
+let runnableCount = 0;
+let runnableLongest = 0;
+function runnableTransitions(style: CSSStyleDeclaration): void {
+  const entries = transitionEntries(style);
+  runnableCount = entries === null ? 1 : entries.length;
+  runnableLongest = 0;
+  if (entries !== null) {
+    for (let i = 0, len = entries.length; i < len; ++i) {
+      const [, combined] = entries[i];
+      if (combined > runnableLongest) runnableLongest = combined;
     }
   }
-  return curr;
+}
+
+interface TransitionWait {
+  node: Element;
+  // The next wait of the same element
+  next: TransitionWait | null;
+  // Transitions still to end or be cancelled; each property counts once
+  left: number;
+  seen: Set<string> | null;
+  done: boolean;
+  callback: () => void;
+  root: Node | null;
+  group: TimerGroup | null;
+  // An image that hasn't loaded starts its fallback timer on load
+  onLoad: (() => void) | null;
+}
+
+interface TimerGroup {
+  delay: number;
+  timer: ReturnType<typeof setTimeout>;
+  waits: TransitionWait[];
+  live: number;
+}
+
+const waitsByNode = new Map<Element, TransitionWait>();
+const rootWaits = new Map<Node, number>();
+// Fallback timers of the current task by delay: waits registered in one task share them
+let taskGroups: Map<number, TimerGroup> | null = null;
+
+function onTransitionEvent(event: Event): void {
+  // Transitions of ::before and ::after target their element as well
+  if ((event as TransitionEvent).pseudoElement) return;
+  const name = (event as TransitionEvent).propertyName;
+  let wait: TransitionWait | null | undefined = waitsByNode.get(
+    event.target as Element,
+  );
+  while (wait !== undefined && wait !== null) {
+    const next: TransitionWait | null = wait.next;
+    // A property counts once; with one transition to wait for, the first event ends the wait
+    if (name && (wait.left > 1 || wait.seen !== null)) {
+      if (wait.seen === null) wait.seen = new Set();
+      if (wait.seen.has(name)) {
+        wait = next;
+        continue;
+      }
+      wait.seen.add(name);
+    }
+    if (--wait.left <= 0) finishWait(wait, true);
+    wait = next;
+  }
+}
+
+function releaseWait(wait: TransitionWait): void {
+  wait.done = true;
+  let head: TransitionWait | null | undefined = waitsByNode.get(wait.node);
+  if (head === wait) {
+    if (wait.next === null) waitsByNode.delete(wait.node);
+    else waitsByNode.set(wait.node, wait.next);
+  } else {
+    while (head !== undefined && head !== null && head.next !== wait) {
+      head = head.next;
+    }
+    if (head !== undefined && head !== null) head.next = wait.next;
+  }
+  const root = wait.root;
+  if (root !== null) {
+    const count = rootWaits.get(root)! - 1;
+    if (count === 0) {
+      rootWaits.delete(root);
+      root.removeEventListener('transitionend', onTransitionEvent, true);
+      root.removeEventListener('transitioncancel', onTransitionEvent, true);
+    } else {
+      rootWaits.set(root, count);
+    }
+  }
+  const group = wait.group;
+  if (group !== null && --group.live === 0) {
+    clearTimeout(group.timer);
+    // A wait that the task registers later needs a timer of its own
+    if (taskGroups?.get(group.delay) === group) taskGroups.delete(group.delay);
+  }
+  if (wait.onLoad !== null) {
+    wait.node.removeEventListener('load', wait.onLoad);
+    wait.node.removeEventListener('error', wait.onLoad);
+  }
+}
+
+function finishWait(wait: TransitionWait, callback: boolean): void {
+  if (wait.done) return;
+  releaseWait(wait);
+  if (callback) wait.callback();
+}
+
+function joinTimerGroup(wait: TransitionWait, delay: number): void {
+  if (taskGroups === null) {
+    const groups = (taskGroups = new Map());
+    queueMicrotask(() => {
+      if (taskGroups === groups) taskGroups = null;
+    });
+  }
+  let group = taskGroups.get(delay);
+  if (group === undefined) {
+    const created: TimerGroup = {
+      delay,
+      waits: [],
+      live: 0,
+      timer: setTimeout(() => {
+        for (let i = 0, len = created.waits.length; i < len; ++i) {
+          const member = created.waits[i];
+          finishWait(member, true);
+        }
+      }, delay),
+    };
+    taskGroups.set(delay, (group = created));
+  }
+  group.waits.push(wait);
+  group.live++;
+  wait.group = group;
+}
+
+/**
+ * Calls done once the transitions that node's computed style can run have ended or been cancelled,
+ * or after the longest of them plus 100 ms. One capture listener per root node serves every wait,
+ * and waits registered in one task share their fallback timers. Returns a cancel function.
+ */
+export function waitForTransitions(
+  node: Element,
+  done: () => void,
+): () => void {
+  runnableTransitions(window.getComputedStyle(node));
+  const longest = runnableLongest;
+  const root = node.getRootNode();
+  const wait: TransitionWait = {
+    node,
+    next: waitsByNode.get(node) ?? null,
+    left: runnableCount,
+    seen: null,
+    done: false,
+    callback: done,
+    root,
+    group: null,
+    onLoad: null,
+  };
+  waitsByNode.set(node, wait);
+  const rootCount = rootWaits.get(root) ?? 0;
+  if (rootCount === 0) {
+    root.addEventListener('transitionend', onTransitionEvent, true);
+    root.addEventListener('transitioncancel', onTransitionEvent, true);
+  }
+  rootWaits.set(root, rootCount + 1);
+  const delay = longest > 0 ? Math.round(longest * 1000) + 100 : 0;
+  if (node.nodeName === 'IMG' && !(node as HTMLImageElement).complete) {
+    wait.onLoad = () => {
+      node.removeEventListener('load', wait.onLoad!);
+      node.removeEventListener('error', wait.onLoad!);
+      wait.onLoad = null;
+      if (!wait.done) joinTimerGroup(wait, delay);
+    };
+    node.addEventListener('load', wait.onLoad);
+    node.addEventListener('error', wait.onLoad);
+  } else {
+    joinTimerGroup(wait, delay);
+  }
+  return () => finishWait(wait, false);
 }

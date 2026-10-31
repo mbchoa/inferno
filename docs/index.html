@@ -24,6 +24,16 @@
           <small><a href="dbmonster/index.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/dbmonster/app.js">View source...</a></small>
         </p>
         <p>
+          <a href="dbmonster-mobx/index.html">DBMonster (MobX)</a><br />
+          DBMonster with the data kept in a MobX observable and the table rendered by an inferno-mobx observer.<br />
+          <small><a href="dbmonster-mobx/index.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/dbmonster-mobx/app.js">View source...</a></small>
+        </p>
+        <p>
+          <a href="event-test/index.html">Event handlers</a><br />
+          This benchmark measures mount, patch and unmount time of 500 list items with delegated and native event handlers, hoisted, linkEvent and inline functions.<br />
+          <small><a href="event-test/index.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/event-test/app.js">View source...</a></small>
+        </p>
+        <p>
           <a href="uibench/index.html">UI Benchmark</a><br />
           InfernoJS implementation of UI Benchmark. This benchmark uses optimization patterns specific to InfernoJS only.<br />
           <small><a href="uibench/index.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/uibench/app.js">View source...</a></small>
@@ -37,6 +47,11 @@
             <a href="uibench-normalization/index.html">UI Benchmark (Normalization)</a><br />
             This version of UI Benchmark tracks performance regressions in Inferno's normalization algorithm. Do not write code like this.<br />
             <small><a href="uibench-normalization/index.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/uibench-normalization/app.js">View source...</a></small>
+        </p>
+        <p>
+          <a href="uibench-lifecycle/index.html">UI Benchmark (Lifecycle)</a><br />
+          This version of UI Benchmark tracks performance regressions in Inferno's lifecycle process. Do not write code like this.<br />
+          <small><a href="uibench-lifecycle/index.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/uibench-lifecycle/app.js">View source...</a></small>
         </p>
         <p>
             <a href="uibench-reactlike/index.html">UI Benchmark (same as React)</a><br />
@@ -71,19 +86,9 @@
             <small><a href="async-render/index.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/async-render/app.js">View source...</a></small>
         </p>
         <p>
-            <a href="attributes/index.html">Attributes</a><br />
-            Using element style attributes.<br />
-            <small><a href="attributes/index.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/attributes/index.html">View source...</a></small>
-        </p>
-        <p>
           <a href="compat/index.html">React Compatibility</a><br />
           Using React compatibility extension.<br />
-          <small><a href="1kcomponents/index.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/compat/index.html">View source...</a></small>
-        </p>
-        <p>
-            <a href="devtools/index.html">React Devtools</a><br />
-            Activating React devtools.<br />
-            <small><a href="devtools/index.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/devtools/index.html">View source...</a></small>
+          <small><a href="compat/index.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/compat/index.html">View source...</a></small>
         </p>
         <p>
             <a href="form/index.html">Input Forms</a><br />
@@ -91,9 +96,31 @@
             <small><a href="form/index.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/form/index.html">View source...</a></small>
         </p>
         <p>
+            <a href="router_prompt/index.html">Router &lt;Prompt&gt; back button</a><br />
+            Reproduction for inferno-router's &lt;Prompt&gt; not prompting when navigating with the browser back button on iOS Safari. Logs every popstate, history call and confirm on the page itself.<br />
+            <small><a href="router_prompt/index.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/router_prompt/app.js">View source...</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/router_prompt/README.md">Read more...</a></small>
+        </p>
+        <p>
             <a href="svg/tiger.html">Inferno and SVG</a><br />
             The tiger rendered with an SVG in Inferno.<br />
             <small><a href="svg/tiger.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/svg/tiger.html">View source...</a></small>
+        </p>
+        <p>
+            <a href="math-elements/index.html">Inferno and MathML</a><br />
+            MathML formulas rendered with Inferno.<br />
+            <small><a href="math-elements/index.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/math-elements/app.js">View source...</a></small>
+        </p>
+
+        <h2>Test pages</h2>
+        <p>
+          <a href="animation-glitch/index.html">Animation glitches</a><br />
+          Reproduces previous inferno-animation glitches in keyed lists, nested lists and global animations, and reports whether each one still occurs.<br />
+          <small><a href="animation-glitch/index.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/animation-glitch/app.js">View source...</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/animation-glitch/app.css">View CSS...</a></small>
+        </p>
+        <p>
+          <a href="autofocus_bug/index.html">autoFocus</a><br />
+          Checks that autoFocus focuses elements that Inferno mounts, including the root element of a new tree. Each case runs on its own page load.<br />
+          <small><a href="autofocus_bug/index.html">Example</a> | <a href="https://github.com/infernojs/inferno/blob/master/docs/autofocus_bug/app.js">View source...</a></small>
         </p>
     </div>
 </body>

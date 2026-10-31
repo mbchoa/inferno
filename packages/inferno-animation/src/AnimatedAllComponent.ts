@@ -1,21 +1,39 @@
-import { Component, Inferno } from 'inferno';
-import { AnimationClass, componentDidAppear, componentWillDisappear, componentWillMove } from './animations';
+import { Component, type InfernoNode, type ParentDOM } from 'inferno';
+import {
+  type AnimationClass,
+  componentDidAppear,
+  componentWillDisappear,
+  componentWillMove,
+} from './animations';
+import { preparedOwnerMayMove } from './moveAnimations';
 
-type AnimationProp = {
+interface AnimationProp {
   animation?: string | AnimationClass;
-  children?: Inferno.InfernoNode;
-};
+  children?: InfernoNode;
+}
 
-export class AnimatedAllComponent<P = {}, S = {}> extends Component<AnimationProp & P, S> {
-  public componentDidAppear(dom: HTMLElement) {
+export abstract class AnimatedAllComponent<P, S> extends Component<
+  AnimationProp & P,
+  S
+> {
+  public componentDidAppear(dom: HTMLElement | SVGElement): void {
     componentDidAppear(dom, this.props);
   }
 
-  public componentWillDisappear(dom: HTMLElement, callback: Function) {
+  public componentWillDisappear(
+    dom: HTMLElement | SVGElement,
+    callback: () => void,
+  ): void {
     componentWillDisappear(dom, this.props, callback);
   }
 
-  public componentWillMove(parentVNode, parent: HTMLElement, dom: HTMLElement, props: any) {
-    componentWillMove(parentVNode, parent, dom, props);
+  public componentWillMove(
+    parentVNode,
+    parent: ParentDOM,
+    dom: HTMLElement | SVGElement,
+  ): void {
+    if (preparedOwnerMayMove()) {
+      componentWillMove(parentVNode, parent, dom, this.props);
+    }
   }
 }

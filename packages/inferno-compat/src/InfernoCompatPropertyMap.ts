@@ -34,7 +34,7 @@ const ATTRS = [
   'font-size-adjust',
   'font-stretch',
   'font-style',
-  'font-constiant',
+  'font-variant',
   'font-weight',
   'glyph-name',
   'glyph-orientation-horizontal',
@@ -94,19 +94,24 @@ const ATTRS = [
   'xml:base',
   'xmlns:xlink',
   'xml:lang',
-  'xml:space'
+  'xml:space',
 ];
 
-export const InfernoCompatPropertyMap = {
-  htmlFor: 'for',
-  onDoubleClick: 'onDblClick'
-};
+// No prototype: props named like Object.prototype members ("toString") have no React name to map
+export const InfernoCompatPropertyMap: Record<string, string | undefined> =
+  Object.assign(Object.create(null), {
+    htmlFor: 'for',
+    onDoubleClick: 'onDblClick',
+  });
 
-const CAMELIZE = /[\-:]([a-z])/g;
-const capitalize = (token) => token[1].toUpperCase();
+const CAMELIZE = /[-:]([a-z])/g;
+function capitalize(token: string): string {
+  return token[1].toUpperCase();
+}
 
-ATTRS.forEach((original) => {
+for (let i = 0, len = ATTRS.length; i < len; ++i) {
+  const original = ATTRS[i];
   const reactName = original.replace(CAMELIZE, capitalize);
 
   InfernoCompatPropertyMap[reactName] = original;
-});
+}

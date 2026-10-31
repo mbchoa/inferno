@@ -1,8 +1,8 @@
-import { Component, render } from 'inferno';
+import { Component, type FormEvent, render } from 'inferno';
 import { Provider } from 'inferno-mobx';
 import { observable } from 'mobx';
 
-describe('top level context', () => {
+describe('inferno-mobx typings', () => {
   let container;
 
   beforeEach(function () {
@@ -44,6 +44,13 @@ describe('top level context', () => {
       render(<MyComponent />, container);
     });
 
+    it('Should not complain about onInput event.target', () => {
+      render(
+        <input onInput={(e: FormEvent<HTMLInputElement>) => e.target.value} />,
+        container,
+      );
+    });
+
     it('Should be possible to return null from render SFC', () => {
       // SFC
       const MyComponent = () => {
@@ -64,16 +71,16 @@ describe('top level context', () => {
         todos: [
           {
             completed: false,
-            title: 'a'
-          }
-        ]
+            title: 'a',
+          },
+        ],
       });
 
       render(
         <Provider store={store}>
           <MyComponent />
         </Provider>,
-        container
+        container,
       );
     });
   });

@@ -1,16 +1,21 @@
 import { VNodeFlags } from 'inferno-vnode-flags';
-import { Dispatch, Store } from 'redux';
-import hoistNonReactStatics from 'hoist-non-inferno-statics';
-import { Component, createComponentVNode, normalizeProps } from 'inferno';
+import { type Dispatch, type Store } from 'redux';
+import {
+  Component,
+  type InfernoNode,
+  newComponentVNode,
+  normalizeProps,
+} from 'inferno';
 import { Subscription } from '../utils/Subscription';
-import { combineFrom } from 'inferno-shared';
+import { hoistStaticProperties, isFunction } from 'inferno-shared';
 
 let hotReloadingVersion = 0;
-const dummyState = {};
-// tslint:disable-next-line:no-empty
-const noop = () => {};
+const noop = (): void => {};
 
-const makeSelectorStateful = (sourceSelector, store) => {
+const makeSelectorStateful = (
+  sourceSelector: (state: any, props: any) => any,
+  store: Store<any>,
+) => {
   // wrap the selector in an object that tracks its results between runs.
   const selector = {
     error: null as Error | null,
@@ -28,13 +33,15 @@ const makeSelectorStateful = (sourceSelector, store) => {
         selector.error = e;
       }
     },
-    shouldComponentUpdate: false
+    shouldComponentUpdate: false,
   };
 
   return selector;
 };
 
 export interface IConnectOptions {
+  displayName: string;
+
   /**
    * the func used to compute this HOC's displayName from the wrapped component's displayName.
    * probably overridden by wrapper functions such as connect().
@@ -100,19 +107,26 @@ export interface IConnectOptions {
   areStatePropsEqual?: any;
 
   areMergedPropsEqual?: any;
+
+  WrappedComponent?: any;
+
+  wrappedComponentName: string;
 }
 
 // TODO: This should be typed better. Spesifically, the output and input props should be generic.
-export type SelectorFactory = (dispatch: Dispatch<any>, options: IConnectOptions) => (state: any, props: any) => any;
+export type SelectorFactory = (
+  dispatch: Dispatch<any>,
+  options: IConnectOptions,
+) => (state: any, props: any) => any;
 
 // TODO: Move
-const invariant = (test: boolean, error: string) => {
+const invariant = (test: boolean, error: string): void => {
   if (!test) {
     throw new Error(error);
   }
 };
 
-function getDefaultName(name) {
+function getDefaultName(name): string {
   return `ConnectAdvanced(${name})`;
 }
 
@@ -126,22 +140,27 @@ export function connectAdvanced(
     storeKey = 'store',
     withRef = false,
     ...connectOptions
-  }: Partial<IConnectOptions>
-) {
+  }: Partial<IConnectOptions>,
+): Function {
   const subscriptionKey = storeKey + 'Subscription';
   const version = hotReloadingVersion++;
 
-  const wrapWithConnect = <T extends Function>(WrappedComponent: T): T => {
+  const wrapWithConnect = <T extends Function>(WrappedComponent: T): any => {
     invariant(
-      typeof WrappedComponent === 'function',
-      `You must pass a component to the function returned by ` + `connect. Instead received ${WrappedComponent}`
+      isFunction(WrappedComponent),
+      `You must pass a component to the function returned by ` +
+        `connect. Instead received ${WrappedComponent as any}`,
     );
 
-    const wrappedComponentName: string = (WrappedComponent as any).displayName || WrappedComponent.name || 'Component';
+    const wrappedComponentName: string =
+      (WrappedComponent as any).displayName ||
+      WrappedComponent.name ||
+      'Component';
 
     const displayName = getDisplayName(wrappedComponentName);
 
-    const selectorFactoryOptions: IConnectOptions = combineFrom(connectOptions, {
+    const selectorFactoryOptions: IConnectOptions = {
+      ...connectOptions,
       WrappedComponent,
       displayName,
       getDisplayName,
@@ -150,10 +169,14 @@ export function connectAdvanced(
       shouldHandleStateChanges,
       storeKey,
       withRef,
-      wrappedComponentName
-    }) as any;
+      wrappedComponentName,
+    };
 
     class Connect<P, S> extends Component<P, S> {
+      /* eslint-disable */
+      // @ts-ignore
+      public state: {};
+      /* eslint-enable */
       public static displayName = displayName;
       public static WrappedComponent = WrappedComponent;
 
@@ -175,7 +198,7 @@ export function connectAdvanced(
         super(props, context);
 
         this.version = version;
-        this.state = {} as S;
+        this.state = {};
         this.renderCount = 0;
         this.store = this.props[storeKey] || this.context[storeKey];
         this.propsMode = Boolean(props[storeKey]);
@@ -187,25 +210,25 @@ export function connectAdvanced(
           `Could not find "${storeKey}" in either the context or ` +
             `props of "${displayName}". ` +
             `Either wrap the root component in a <Provider>, ` +
-            `or explicitly pass "${storeKey}" as a prop to "${displayName}".`
+            `or explicitly pass "${storeKey}" as a prop to "${displayName}".`,
         );
 
         this.initSelector();
         this.initSubscription();
       }
 
-      public getChildContext() {
+      public getChildContext(): Record<string, any> {
         // If this component received store from props, its subscription should be transparent
         // to any descendants receiving store+subscription from context; it passes along
         // subscription passed to it. Otherwise, it shadows the parent subscription, which allows
         // Connect to control ordering of notifications to flow top-down.
         const subscription = this.propsMode ? null : this.subscription;
         return {
-          [subscriptionKey]: subscription || this.context[subscriptionKey]
+          [subscriptionKey]: subscription || this.context[subscriptionKey],
         };
       }
 
-      public componentWillMount() {
+      public componentWillMount(): void {
         if (!shouldHandleStateChanges || this.$SSR) {
           return;
         }
@@ -214,15 +237,15 @@ export function connectAdvanced(
         this.selector.run(this.props);
       }
 
-      public componentWillReceiveProps(nextProps) {
+      public componentWillReceiveProps(nextProps): void {
         this.selector.run(nextProps);
       }
 
-      public shouldComponentUpdate() {
+      public shouldComponentUpdate(): boolean {
         return this.selector.shouldComponentUpdate;
       }
 
-      public componentWillUnmount() {
+      public componentWillUnmount(): void {
         if (this.subscription) {
           this.subscription.tryUnsubscribe();
         }
@@ -237,30 +260,43 @@ export function connectAdvanced(
       }
 
       public getWrappedInstance() {
-        invariant(withRef, `To access the wrapped instance, you need to specify ` + `{ withRef: true } in the options argument of the ${methodName}() call.`);
+        invariant(
+          withRef,
+          `To access the wrapped instance, you need to specify ` +
+            `{ withRef: true } in the options argument of the ${methodName}() call.`,
+        );
 
         return this.wrappedInstance;
       }
 
-      private setWrappedInstance(ref) {
+      private setWrappedInstance(ref): void {
         this.wrappedInstance = ref;
       }
 
-      public initSelector() {
-        const sourceSelector = selectorFactory(this.store!.dispatch, selectorFactoryOptions);
-        this.selector = makeSelectorStateful(sourceSelector, this.store);
+      public initSelector(): void {
+        const sourceSelector = selectorFactory(
+          this.store!.dispatch,
+          selectorFactoryOptions,
+        );
+        this.selector = makeSelectorStateful(sourceSelector, this.store!);
         this.selector.run(this.props);
       }
 
-      public initSubscription() {
+      public initSubscription(): void {
         if (!shouldHandleStateChanges) {
           return;
         }
 
         // parentSub's source should match where store came from: props vs. context. A component
         // connected to the store via props shouldn't use subscription from context, or vice versa.
-        const parentSub = (this.propsMode ? this.props : this.context)[subscriptionKey];
-        this.subscription = new Subscription(this.store!, parentSub, this.onStateChange.bind(this));
+        const parentSub = (this.propsMode ? this.props : this.context)[
+          subscriptionKey
+        ];
+        this.subscription = new Subscription(
+          this.store!,
+          parentSub,
+          this.onStateChange.bind(this),
+        );
 
         // `notifyNestedSubs` is duplicated to handle the case where the component is  unmounted in
         // the middle of the notification loop, where `this.subscription` will then be null. An
@@ -268,21 +304,23 @@ export function connectAdvanced(
         // replacing it with a no-op on unmount. This can probably be avoided if Subscription's
         // listeners logic is changed to not call listeners that have been unsubscribed in the
         // middle of the notification loop.
-        this.notifyNestedSubs = this.subscription!.notifyNestedSubs.bind(this.subscription);
+        this.notifyNestedSubs = this.subscription.notifyNestedSubs.bind(
+          this.subscription,
+        );
       }
 
-      private onStateChange() {
+      private onStateChange(): void {
         this.selector.run(this.props);
 
         if (!this.selector.shouldComponentUpdate) {
           this.notifyNestedSubs!();
         } else {
           this.componentDidUpdate = this.notifyNestedSubsOnComponentDidUpdate;
-          this.setState(dummyState);
+          this.setState({});
         }
       }
 
-      private notifyNestedSubsOnComponentDidUpdate() {
+      private notifyNestedSubsOnComponentDidUpdate(): void {
         // `componentDidUpdate` is conditionally implemented when `onStateChange` determines it
         // needs to notify nested subs. Once called, it unimplements itself until further state
         // changes occur. Doing it this way vs having a permanent `componentDidMount` that does
@@ -292,8 +330,8 @@ export function connectAdvanced(
         this.notifyNestedSubs!();
       }
 
-      public isSubscribed() {
-        return Boolean(this.subscription && this.subscription.isSubscribed());
+      public isSubscribed(): boolean {
+        return Boolean(this.subscription?.isSubscribed());
       }
 
       private addExtraProps(props: any) {
@@ -305,7 +343,7 @@ export function connectAdvanced(
         // this is especially important for 'ref' since that's a reference back to the component
         // instance. a singleton memoized selector would then be holding a reference to the
         // instance, preventing the instance from being garbage collected, and that would be bad
-        const withExtras = combineFrom(props, null);
+        const withExtras = { ...props };
 
         if (renderCountProp) {
           withExtras[renderCountProp] = this.renderCount++;
@@ -316,7 +354,7 @@ export function connectAdvanced(
         return withExtras;
       }
 
-      public render() {
+      public render(): InfernoNode {
         const selector = this.selector;
         selector.shouldComponentUpdate = false;
 
@@ -324,37 +362,41 @@ export function connectAdvanced(
           throw selector.error;
         } else {
           return normalizeProps(
-            createComponentVNode(
+            newComponentVNode(
               VNodeFlags.ComponentUnknown,
               WrappedComponent,
               this.addExtraProps(selector.props),
               null,
-              withRef ? this.setWrappedInstance : null
-            )
+
+              withRef ? this.setWrappedInstance : null,
+            ),
           );
         }
       }
     }
 
     if (process.env.NODE_ENV !== 'production') {
-      (Connect.prototype as any).componentWillUpdate = function componentWillUpdate() {
-        if (this.version !== version) {
-          // We are hot reloading!
-          this.version = version;
-          this.initSelector();
+      (Connect.prototype as any).componentWillUpdate =
+        function componentWillUpdate() {
+          if (this.version !== version) {
+            // We are hot reloading!
+            this.version = version;
+            this.initSelector();
 
-          if (this.subscription) {
-            this.subscription.tryUnsubscribe();
+            if (this.subscription) {
+              this.subscription.tryUnsubscribe();
+            }
+            this.initSubscription();
+            if (shouldHandleStateChanges) {
+              this.subscription.trySubscribe();
+            }
           }
-          this.initSubscription();
-          if (shouldHandleStateChanges) {
-            this.subscription.trySubscribe();
-          }
-        }
-      };
+        };
     }
 
-    return hoistNonReactStatics(Connect, WrappedComponent) as T;
+    hoistStaticProperties(Connect, WrappedComponent);
+
+    return Connect;
   };
 
   return wrapWithConnect;

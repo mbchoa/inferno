@@ -1,30 +1,43 @@
-import { render, rerender, VNode } from 'inferno';
-import { ChildFlags, VNodeFlags } from 'inferno-vnode-flags';
+import { render, rerender, type VNode } from 'inferno';
+import { VNodeFlags } from 'inferno-vnode-flags';
 import { isArray, isNullOrUndef } from 'inferno-shared';
 import { getTagNameOfVNode } from './utils';
 
 // Jest Snapshot Utilities
-// Jest formats it's snapshots prettily because it knows how to play with the React test renderer.
+// Jest formats its snapshots prettily because it knows how to play with the React test renderer.
 // Symbols and algorithm have been reversed from the following file:
 // https://github.com/facebook/react/blob/v15.4.2/src/renderers/testing/ReactTestRenderer.js#L98
 
-const symbolValue = typeof Symbol === 'undefined' ? 'react.test.json' : Symbol.for('react.test.json');
+type InfernoTestRendererNode = InfernoSnapshot | string;
 
-function createSnapshotObject(object: object) {
+export interface InfernoSnapshot {
+  type: string;
+  props: Record<string, any>;
+  children: null | InfernoTestRendererNode[];
+  $$typeof?: symbol | string;
+}
+
+const symbolValue =
+  typeof Symbol === 'undefined'
+    ? 'react.test.json'
+    : Symbol.for('react.test.json');
+
+function createSnapshotObject(object: InfernoSnapshot): InfernoSnapshot {
   Object.defineProperty(object, '$$typeof', {
-    value: symbolValue
+    value: symbolValue,
   });
 
   return object;
 }
 
-function removeChildren(item) {
-  if (Array.isArray(item)) {
-    for (let i = 0; i < item.length; ++i) {
-      removeChildren(item[i]);
+function removeChildren(item): void {
+  if (isArray(item)) {
+    for (let i = 0, len = item.length; i < len; ++i) {
+      const child = item[i];
+      removeChildren(child);
     }
-  } else if (item && item.props) {
-    if (item.props.hasOwnProperty('children')) {
+  } else if (item?.props) {
+    if (Object.prototype.hasOwnProperty.call(item.props, 'children')) {
       delete item.props.children;
     }
 
@@ -32,7 +45,7 @@ function removeChildren(item) {
   }
 }
 
-function buildVNodeSnapshot(vNode: VNode) {
+function buildVNodeSnapshot(vNode: VNode): InfernoSnapshot {
   const flags = vNode.flags;
   const children: any = vNode.children;
   let childVNode;
@@ -43,16 +56,17 @@ function buildVNodeSnapshot(vNode: VNode) {
     childVNode = buildVNodeSnapshot(children);
   }
 
-  if (vNode.childFlags === ChildFlags.HasVNodeChildren) {
+  if (flags & VNodeFlags.HasVNodeChildren) {
     childVNode = buildVNodeSnapshot(children);
-  } else if (vNode.childFlags & ChildFlags.MultipleChildren) {
+  } else if (flags & VNodeFlags.MultipleChildren) {
     childVNode = [];
 
     for (let i = 0, len = children.length; i < len; ++i) {
-      childVNode.push(buildVNodeSnapshot(children[i]));
+      const child = children[i];
+      childVNode.push(buildVNodeSnapshot(child));
     }
-  } else if (vNode.childFlags & ChildFlags.HasTextChildren) {
-    childVNode = vNode.children + '';
+  } else if (flags & VNodeFlags.HasTextChildren) {
+    childVNode = (vNode.children as string | number) + '';
   }
 
   if (flags & VNodeFlags.Element) {
@@ -62,7 +76,7 @@ function buildVNodeSnapshot(vNode: VNode) {
     if (props) {
       const keys = Object.keys(props);
 
-      for (let i = 0; i < keys.length; ++i) {
+      for (let i = 0, len = keys.length; i < len; ++i) {
         const key = keys[i];
         const value = props[key];
 
@@ -76,7 +90,7 @@ function buildVNodeSnapshot(vNode: VNode) {
       snapShotProps.className = vNode.className;
     }
 
-    // Jest expects children to always be array
+    // Jest expects children to always be an array
     if (childVNode && !isArray(childVNode)) {
       childVNode = [childVNode];
     }
@@ -84,20 +98,20 @@ function buildVNodeSnapshot(vNode: VNode) {
     return createSnapshotObject({
       children: childVNode,
       props: snapShotProps,
-      type: getTagNameOfVNode(vNode)
+      type: getTagNameOfVNode(vNode) as string,
     });
   } else if (flags & VNodeFlags.Text) {
-    childVNode = vNode.children + '';
+    childVNode = (vNode.children as string | number) + '';
   }
 
   return childVNode;
 }
 
-export function vNodeToSnapshot(vNode: VNode) {
+export function vNodeToSnapshot(vNode: VNode): InfernoSnapshot {
   return buildVNodeSnapshot(vNode);
 }
 
-export function renderToSnapshot(input: VNode) {
+export function renderToSnapshot(input: VNode): InfernoSnapshot {
   render(input, document.createElement('div'));
   rerender(); // Flush all pending set state calls
   const snapshot = vNodeToSnapshot(input);

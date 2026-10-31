@@ -1,7 +1,4 @@
 import { Component, render, rerender } from 'inferno';
-import { innerHTML } from 'inferno-utils';
-
-/* tslint:disable:no-console */
 
 describe('Component lifecycle', () => {
   let container;
@@ -34,12 +31,12 @@ describe('Component lifecycle', () => {
 
     render(<Com value={1} />, container);
 
-    expect(innerHTML(container.innerHTML)).toBe(innerHTML('<div>1</div>'));
+    expect(container.innerHTML).toBe('<div>1</div>');
 
     render(<Com value={2} />, container);
 
     expect(callCount).toBe(1);
-    expect(innerHTML(container.innerHTML)).toBe(innerHTML('<div>2</div>'));
+    expect(container.innerHTML).toBe('<div>2</div>');
   });
 
   it('Current state in componentWillUpdate should not equal nextState if setState is called from componentWillReceiveProps', () => {
@@ -47,7 +44,7 @@ describe('Component lifecycle', () => {
 
     class Child extends Component<{ active: boolean }, { active: boolean }> {
       public state = {
-        active: false
+        active: false,
       };
 
       constructor() {
@@ -57,7 +54,7 @@ describe('Component lifecycle', () => {
       public componentWillReceiveProps(nextProps) {
         if (!this.props.active && nextProps.active) {
           this.setState({
-            active: true
+            active: true,
           });
         }
       }
@@ -72,9 +69,9 @@ describe('Component lifecycle', () => {
       }
     }
 
-    class Parent extends Component<{}, { active: boolean }> {
+    class Parent extends Component<object, { active: boolean }> {
       public state = {
-        active: false
+        active: false,
       };
 
       constructor() {
@@ -84,7 +81,7 @@ describe('Component lifecycle', () => {
 
       public _setActive() {
         this.setState({
-          active: true
+          active: true,
         });
       }
 
@@ -127,12 +124,12 @@ describe('Component lifecycle', () => {
 
     render(<Com value={1} />, container);
 
-    expect(innerHTML(container.innerHTML)).toBe(innerHTML('<div>1</div>'));
+    expect(container.innerHTML).toBe('<div>1</div>');
 
     render(<Com value={2} />, container);
 
     expect(callCount).toBe(1);
-    expect(innerHTML(container.innerHTML)).toBe(innerHTML('<div>2</div>'));
+    expect(container.innerHTML).toBe('<div>2</div>');
   });
 
   it('Should call componentWillUnmount before node is removed from DOM tree', () => {
@@ -160,11 +157,14 @@ describe('Component lifecycle', () => {
 
       public componentWillUnmount() {
         // verify its not removed from DOM tree yet.
-        expect(this.element.parentElement != null ? this.element.parentElement.parentElement : null).toBe(container);
+        expect(
+          this.element.parentElement != null
+            ? this.element.parentElement.parentElement
+            : null,
+        ).toBe(container);
       }
 
       public render() {
-        // eslint-disable-next-line
         return (
           <div className="foobar" ref={(el) => (this.element = el!)}>
             1
@@ -196,7 +196,6 @@ describe('Component lifecycle', () => {
       }
     }
 
-    // eslint-disable-next-line no-return-assign
     render(
       <Com
         ref={(inst) => {
@@ -204,12 +203,11 @@ describe('Component lifecycle', () => {
         }}
         value={1}
       />,
-      container
+      container,
     );
 
     c.componentDidUpdate = undefined;
 
-    // eslint-disable-next-line no-return-assign
     render(<Com ref={(inst) => (c = inst)} value={2} />, container);
   });
 });
@@ -231,8 +229,6 @@ describe('legacy life cycle', () => {
   });
 
   it('should warn when mix legacy life cycle with new ones', () => {
-    /* tslint:disable:member-access no-empty */
-
     // build the component and element to be rendered
     class Foo extends Component {
       // just added to force the warnings
@@ -260,13 +256,54 @@ describe('legacy life cycle', () => {
     expect(consoleErrorStub).toHaveBeenCalledTimes(1);
 
     const message = consoleErrorStub.calls.argsFor(0)[0];
-    expect(message.indexOf('componentWillMount')).toBeGreaterThan(-1);
-    expect(message.indexOf('componentWillReceiveProps')).toBeGreaterThan(-1);
-    expect(message.indexOf('componentWillUpdate')).toBeGreaterThan(-1);
+    expect(message.includes('componentWillMount')).toBeTruthy();
+    expect(message.includes('componentWillReceiveProps')).toBeTruthy();
+    expect(message.includes('componentWillUpdate')).toBeTruthy();
+  });
+
+  it('should name the component by its displayName in the legacy life cycle warning', () => {
+    class Foo extends Component {
+      static displayName = 'PrettyFoo';
+
+      static getDerivedStateFromProps() {}
+
+      componentWillMount() {}
+
+      render() {
+        return <div>Foo</div>;
+      }
+    }
+
+    render(<Foo />, container);
+
+    expect(consoleErrorStub).toHaveBeenCalledTimes(1);
+
+    const message = consoleErrorStub.calls.argsFor(0)[0];
+    expect(message.includes('PrettyFoo contains the following')).toBeTruthy();
+  });
+
+  it('should not name the component by a name field of its instance in the legacy life cycle warning', () => {
+    class Foo extends Component {
+      static getDerivedStateFromProps() {}
+
+      public name = 'instance field';
+
+      componentWillMount() {}
+
+      render() {
+        return <div>Foo</div>;
+      }
+    }
+
+    render(<Foo />, container);
+
+    expect(consoleErrorStub).toHaveBeenCalledTimes(1);
+
+    const message = consoleErrorStub.calls.argsFor(0)[0];
+    expect(message.includes('instance field')).toBeFalsy();
   });
 
   it('should allow suppress legacy life cycles when mixed with new APIs', () => {
-    /* tslint:disable:member-access no-empty */
     // build the component and element to be rendered
     class Foo extends Component {
       // just added to force the warnings
@@ -284,11 +321,11 @@ describe('legacy life cycle', () => {
     }
 
     // suppress the warnings
-    // @ts-ignore
+    // @ts-expect-error
     Foo.prototype.componentWillMount.__suppressDeprecationWarning = true;
-    // @ts-ignore
+    // @ts-expect-error
     Foo.prototype.componentWillReceiveProps.__suppressDeprecationWarning = true;
-    // @ts-ignore
+    // @ts-expect-error
     Foo.prototype.componentWillUpdate.__suppressDeprecationWarning = true;
 
     const element = <Foo />;

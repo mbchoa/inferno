@@ -1,9 +1,29 @@
-import { combineFrom, isArray, isFunction, isInvalid, isNull, isNullOrUndef, isNumber, isString } from 'inferno-shared';
-import { ChildFlags, VNodeFlags } from 'inferno-vnode-flags';
+import {
+  isInvalid,
+  isNull,
+  isNullOrUndef,
+  isNumber,
+  isString,
+} from 'inferno-shared';
+import { VNodeFlags } from 'inferno-vnode-flags';
 import { Readable } from 'stream';
-import { renderStylesToString } from './prop-renderers';
-import { createDerivedState, escapeText, isAttributeNameSafe, renderFunctionalComponent, voidElements } from './utils';
-import type { VNode } from 'inferno';
+import { renderStyleAttribute } from './prop-renderers';
+import {
+  arrayToFragment,
+  createDerivedState,
+  escapeText,
+  getChildContext,
+  getChildSelectValue,
+  getTextareaContent,
+  isAttributeNameSafe,
+  isEmptyFragment,
+  isSelectedOption,
+  renderFunctionalComponent,
+  usesNewAPI,
+  validateTagName,
+  voidElements,
+} from './utils';
+import { EMPTY_OBJ, type VNode } from 'inferno';
 import { mergePendingState } from './stream/streamUtils';
 
 const resolvedPromise = Promise.resolve();
@@ -17,7 +37,7 @@ export class RenderStream extends Readable {
     this.initNode = initNode;
   }
 
-  public _read() {
+  public _read(): void {
     if (this.started) {
       return;
     }
@@ -25,7 +45,7 @@ export class RenderStream extends Readable {
 
     resolvedPromise
       .then(() => {
-        return this.renderNode(this.initNode, null);
+        return this.renderNode(this.initNode, {});
       })
       .then(() => {
         this.push(null);
@@ -35,41 +55,48 @@ export class RenderStream extends Readable {
       });
   }
 
-  public renderNode(vNode, context) {
+  public renderNode(vNode, context, selectValue?: unknown) {
+    vNode = arrayToFragment(vNode);
     const flags = vNode.flags;
 
     if ((flags & VNodeFlags.Component) > 0) {
-      return this.renderComponent(vNode, context, flags & VNodeFlags.ComponentClass);
+      return this.renderComponent(
+        vNode,
+        context,
+        flags & VNodeFlags.ComponentClass,
+        selectValue,
+      );
     }
     if ((flags & VNodeFlags.Element) > 0) {
-      return this.renderElement(vNode, context);
+      return this.renderElement(vNode, context, selectValue);
     }
-    if (isArray(vNode) || (flags & VNodeFlags.Fragment) !== 0) {
-      return this.renderArrayOrFragment(vNode, context);
+    if ((flags & VNodeFlags.Fragment) !== 0) {
+      return this.renderFragment(vNode, context, selectValue);
     }
 
-    return this.renderText(vNode);
+    this.renderText(vNode);
   }
 
-  public renderArrayOrFragment(vNode, context) {
-    const childFlags = vNode.childFlags;
-
-    if (childFlags === ChildFlags.HasVNodeChildren || (isArray(vNode) && vNode.length === 0)) {
+  public renderFragment(vNode, context, selectValue: unknown) {
+    if (isEmptyFragment(vNode)) {
       return this.push('<!--!-->');
-    } else if (childFlags & ChildFlags.MultipleChildren || isArray(vNode)) {
-      const children = isArray(vNode) ? vNode : vNode.children;
-
-      return (children as VNode[]).reduce((p, child) => {
-        return p.then(() => {
-          return Promise.resolve(this.renderNode(child, context)).then(() => !!(child.flags & VNodeFlags.Text));
-        });
-      }, Promise.resolve(false));
     }
+    if ((vNode.flags & VNodeFlags.HasVNodeChildren) !== 0) {
+      return this.renderNode(vNode.children, context, selectValue);
+    }
+
+    return (vNode.children as VNode[]).reduce(async (p, child) => {
+      return await p.then(async () => {
+        return await Promise.resolve(
+          this.renderNode(child, context, selectValue),
+        ).then(() => !!(child.flags & VNodeFlags.Text));
+      });
+    }, Promise.resolve(false));
   }
 
-  public renderComponent(vComponent, context, isClass) {
+  public renderComponent(vComponent, context, isClass, selectValue: unknown) {
     const type = vComponent.type;
-    const props = vComponent.props;
+    const props = vComponent.props || EMPTY_OBJ;
 
     if (!isClass) {
       const renderOutput = renderFunctionalComponent(vComponent, context);
@@ -84,72 +111,88 @@ export class RenderStream extends Readable {
         return this.push(renderOutput + '');
       }
 
-      return this.renderNode(renderOutput, context);
+      return this.renderNode(renderOutput, context, selectValue);
     }
 
     const instance = new type(props, context);
-    const hasNewAPI = Boolean(type.getDerivedStateFromProps);
+    const hasNewAPI = usesNewAPI(type, instance);
     instance.$BS = false;
     instance.$SSR = true;
-    let childContext;
-    if (isFunction(instance.getChildContext)) {
-      childContext = instance.getChildContext();
-    }
-
-    if (!isNullOrUndef(childContext)) {
-      context = combineFrom(context, childContext);
+    if (instance.props === EMPTY_OBJ) {
+      instance.props = props;
     }
     instance.context = context;
     instance.$BR = true;
 
-    return Promise.resolve(!hasNewAPI && instance.componentWillMount && instance.componentWillMount()).then(() => {
-      mergePendingState(instance);
+    return Promise.resolve(!hasNewAPI && instance.componentWillMount?.()).then(
+      () => {
+        mergePendingState(instance);
 
-      if (hasNewAPI) {
-        instance.state = createDerivedState(instance, props, instance.state);
-      }
-      const renderOutput = instance.render(instance.props, instance.state, instance.context);
+        if (hasNewAPI) {
+          instance.state = createDerivedState(instance, props, instance.state);
+        }
+        const renderOutput = instance.render(
+          instance.props,
+          instance.state,
+          instance.context,
+        );
+        const childContext = getChildContext(instance, context);
 
-      if (isInvalid(renderOutput)) {
-        return this.push('<!--!-->');
-      }
-      if (isString(renderOutput)) {
-        return this.push(escapeText(renderOutput));
-      }
-      if (isNumber(renderOutput)) {
-        return this.push(renderOutput + '');
-      }
+        if (isInvalid(renderOutput)) {
+          return this.push('<!--!-->');
+        }
+        if (isString(renderOutput)) {
+          return this.push(escapeText(renderOutput));
+        }
+        if (isNumber(renderOutput)) {
+          return this.push(renderOutput + '');
+        }
 
-      return this.renderNode(renderOutput, context);
-    });
+        return this.renderNode(renderOutput, childContext, selectValue);
+      },
+    );
   }
 
-  public renderChildren(children: VNode[] | VNode | string, context: any, childFlags: ChildFlags) {
-    if (childFlags === ChildFlags.HasVNodeChildren) {
-      return this.renderNode(children, context);
+  public renderChildren(
+    children: VNode[] | VNode | string,
+    context: any,
+    childFlags: VNodeFlags,
+    selectValue: unknown,
+  ) {
+    if (childFlags === VNodeFlags.HasVNodeChildren) {
+      return this.renderNode(children, context, selectValue);
     }
-    if (childFlags === ChildFlags.HasTextChildren) {
-      return this.push(children === '' ? ' ' : escapeText(children + ''));
+    if (childFlags === VNodeFlags.HasTextChildren) {
+      return this.push(
+        (children as string) === ''
+          ? ' '
+          : escapeText((children as string) + ''),
+      );
     }
-    if (childFlags & ChildFlags.MultipleChildren) {
-      return (children as VNode[]).reduce((p, child) => {
-        return p.then(() => {
-          return Promise.resolve(this.renderNode(child, context)).then(() => !!(child.flags & VNodeFlags.Text));
-        });
-      }, Promise.resolve(false));
-    }
+    // Keyed or non-keyed children, the caller handles invalid ones
+    return (children as VNode[]).reduce(async (p, child) => {
+      return await p.then(async () => {
+        return await Promise.resolve(
+          this.renderNode(child, context, selectValue),
+        ).then(() => !!(child.flags & VNodeFlags.Text));
+      });
+    }, Promise.resolve(false));
   }
 
-  public renderText(vNode) {
-    this.push(vNode.children === '' ? ' ' : escapeText(vNode.children));
+  public renderText(vNode): void {
+    this.push(vNode.children === '' ? ' ' : escapeText(vNode.children + ''));
   }
 
-  public renderElement(vNode, context) {
+  public renderElement(vNode, context, selectValue: unknown) {
     const type = vNode.type;
     const props = vNode.props;
+
+    validateTagName(type);
+
     let renderedString = `<${type}`;
     let html;
     const isVoidElement = voidElements.has(type);
+    const isTextarea = type === 'textarea';
     const className = vNode.className;
 
     if (isString(className)) {
@@ -162,13 +205,16 @@ export class RenderStream extends Readable {
       for (const prop in props) {
         const value = props[prop];
 
+        if (isTextarea && (prop === 'value' || prop === 'defaultValue')) {
+          continue; // Rendered as the content
+        }
         switch (prop) {
           case 'dangerouslySetInnerHTML':
-            html = value.__html;
+            html = value?.__html;
             break;
           case 'style':
             if (!isNullOrUndef(props.style)) {
-              renderedString += ` style="${renderStylesToString(props.style)}"`;
+              renderedString += renderStyleAttribute(props.style);
             }
             break;
           case 'children':
@@ -177,13 +223,15 @@ export class RenderStream extends Readable {
             break;
           case 'defaultValue':
             // Use default values if normal values are not present
-            if (!props.value) {
-              renderedString += ` value="${isString(value) ? escapeText(value) : value}"`;
+            if (isNullOrUndef(props.value)) {
+              renderedString += ` value="${
+                isString(value) ? escapeText(value) : value
+              }"`;
             }
             break;
           case 'defaultChecked':
             // Use default values if normal values are not present
-            if (!props.checked) {
+            if (isNullOrUndef(props.checked) && value === true) {
               renderedString += ` checked="${value}"`;
             }
             break;
@@ -200,14 +248,16 @@ export class RenderStream extends Readable {
             }
         }
       }
+      if (isSelectedOption(type, props, selectValue)) {
+        renderedString += ` selected`;
+      }
+      if (isTextarea) {
+        html = getTextareaContent(props) ?? html;
+      }
     }
 
     renderedString += `>`;
     this.push(renderedString);
-
-    if (String(type).match(/[\s\n\/='"\0<>]/)) {
-      throw renderedString;
-    }
 
     if (isVoidElement) {
       return;
@@ -218,14 +268,21 @@ export class RenderStream extends Readable {
         return;
       }
     }
-    const childFlags = vNode.childFlags;
+    const childFlags = vNode.flags & VNodeFlags.ChildFlagsMask;
 
-    if (childFlags === ChildFlags.HasInvalidChildren) {
+    if (childFlags === VNodeFlags.HasInvalidChildren) {
       this.push(`</${type}>`);
       return;
     }
 
-    return Promise.resolve(this.renderChildren(vNode.children, context, childFlags)).then(() => {
+    return Promise.resolve(
+      this.renderChildren(
+        vNode.children,
+        context,
+        childFlags,
+        getChildSelectValue(type, props, selectValue),
+      ),
+    ).then(() => {
       this.push(`</${type}>`);
     });
   }

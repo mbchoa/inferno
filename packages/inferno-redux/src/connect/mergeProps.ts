@@ -1,17 +1,11 @@
+import { isFunction } from 'inferno-shared';
 import { verifyPlainObject } from '../utils/verifyPlainObject';
-import { combineFrom } from 'inferno-shared';
 
-export const defaultMergeProps = (stateProps, dispatchProps, ownProps) => {
-  const merged = combineFrom(ownProps, stateProps);
-
-  if (dispatchProps) {
-    for (const key in dispatchProps) {
-      merged[key] = dispatchProps[key];
-    }
-  }
-
-  return merged;
-};
+export const defaultMergeProps = (stateProps, dispatchProps, ownProps) => ({
+  ...ownProps,
+  ...stateProps,
+  ...dispatchProps,
+});
 
 export const wrapMergePropsFunc = (mergeProps) => {
   return (_dispatch, { displayName, pure, areMergedPropsEqual }) => {
@@ -39,8 +33,13 @@ export const wrapMergePropsFunc = (mergeProps) => {
   };
 };
 
-export const whenMergePropsIsFunction = (mergeProps) => (typeof mergeProps === 'function' ? wrapMergePropsFunc(mergeProps) : undefined);
+export const whenMergePropsIsFunction = (mergeProps): unknown =>
+  isFunction(mergeProps) ? wrapMergePropsFunc(mergeProps) : undefined;
 
-export const whenMergePropsIsOmitted = (mergeProps) => (!mergeProps ? () => defaultMergeProps : undefined);
+export const whenMergePropsIsOmitted = (mergeProps): unknown =>
+  !mergeProps ? () => defaultMergeProps : undefined;
 
-export const defaultMergePropsFactories = [whenMergePropsIsFunction, whenMergePropsIsOmitted];
+export const defaultMergePropsFactories = [
+  whenMergePropsIsFunction,
+  whenMergePropsIsOmitted,
+];

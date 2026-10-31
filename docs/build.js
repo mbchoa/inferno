@@ -1,19 +1,25 @@
 import {rollup} from "rollup";
 import { existsSync, readdirSync, statSync } from "fs";
-import commonjsPlugin from "rollup-plugin-commonjs";
-import nodeResolvePlugin from "rollup-plugin-node-resolve";
-import babelPlugin from "rollup-plugin-babel";
+import commonjsPlugin from "@rollup/plugin-commonjs";
+import nodeResolvePlugin from "@rollup/plugin-node-resolve";
 import { dirname, join, resolve } from "path";
-import replace from "rollup-plugin-replace";
-import { terser } from "rollup-plugin-terser";
+import replace from "@rollup/plugin-replace";
+import terser from '@rollup/plugin-terser';
 import alias from "@rollup/plugin-alias";
 import { fileURLToPath } from "url";
+import babel from "@rollup/plugin-babel";
+import assumptions from "../scripts/babel/assumptions.json" with { type: "json" };
+import targets from "../scripts/babel/targets.json" with { type: "json" };
 
 const isProduction = process.env.NODE_ENV === 'production';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const benchmarks = readdirSync(__dirname).filter(file => statSync(join(__dirname, file)).isDirectory());
-const resolvePkg = pkg => resolve(__dirname, '../packages', pkg, 'dist', 'index.esm.js');
+const requestedExamples = process.argv.slice(2);
+const benchmarks = readdirSync(__dirname).filter(file =>
+  statSync(join(__dirname, file)).isDirectory() &&
+  (requestedExamples.length === 0 || requestedExamples.includes(file))
+);
+const resolvePkg = pkg => resolve(__dirname, '../packages', pkg, 'dist', 'index.mjs');
 
 
 console.log(resolvePkg('inferno'));
@@ -21,20 +27,22 @@ console.log(resolvePkg('inferno'));
 // see below for details on the options
 const plugins = [
   replace({
+    preventAssignment: true,
     'process.env.NODE_ENV': '"production"',
     sourcemap: false
   }),
   nodeResolvePlugin({
     preferBuiltins: false
   }),
-  babelPlugin({
+  babel({
     exclude: 'node_modules/**',
     sourceMaps: false,
     babelrc: false,
-    presets: [['@babel/env', {loose: true, modules: false}]],
+    presets: [['@babel/env', {modules: false, targets, exclude: ['transform-typeof-symbol']}]],
+    assumptions,
     plugins: [
-      ['babel-plugin-inferno', {imports: true, defineAllArguments: true}],
-      ["@babel/plugin-proposal-class-properties", { "loose": true }]
+      ['babel-plugin-inferno', {imports: true, defineAllArguments: true, uselessFlags: 'off'}],
+      "@babel/plugin-transform-class-properties"
     ]
   }),
   commonjsPlugin({
@@ -46,7 +54,6 @@ const plugins = [
       {find: 'inferno', replacement: resolvePkg('inferno')},
       {find: 'inferno-animation', replacement: resolvePkg('inferno-animation')},
       {find: 'inferno-compat', replacement: resolvePkg('inferno-compat')},
-      {find: 'inferno-create-class', replacement: resolvePkg('inferno-create-class')},
       {find: 'inferno-create-element', replacement: resolvePkg('inferno-create-element')},
       {find: 'inferno-hydrate', replacement: resolvePkg('inferno-hydrate')},
       {find: 'inferno-extras', replacement: resolvePkg('inferno-extras')},
@@ -59,7 +66,8 @@ const plugins = [
       {find: 'inferno-test-utils', replacement: resolvePkg('inferno-test-utils')},
       {find: 'inferno-vnode-flags', replacement: resolvePkg('inferno-vnode-flags')},
       {find: 'inferno-clone-vnode', replacement: resolvePkg('inferno-clone-vnode')},
-      {find: 'mobx', replacement: join(__dirname, '../../node_modules/mobx/dist/mobx.esm.js')}
+      {find: 'mobx', replacement: join(__dirname, '../node_modules/mobx/dist/mobx.mjs')},
+      {find: 'perf-monitor', replacement: join(__dirname, '../node_modules/perf-monitor/dist/index.js')}
     ]
   })
 ];
@@ -89,12 +97,13 @@ if (isProduction) {
   );
 }
 
-benchmarks.forEach(dir => {
+for (let i = 0, len = benchmarks.length; i < len; ++i) {
+  const dir = benchmarks[i];
   const benchmarkPath = join(__dirname, dir);
   const appJsPath = resolve(benchmarkPath, 'app.js')
 
   // Don't build examples that don't have app.js
-  if (!existsSync(appJsPath)) return
+  if (!existsSync(appJsPath)) continue;
 
   const inputOptions = {
     input: appJsPath,
@@ -113,4 +122,4 @@ benchmarks.forEach(dir => {
       name: 'inferno'
     });
   });
-});
+}

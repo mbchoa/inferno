@@ -68,6 +68,11 @@ const pkgJSON = JSON.parse(pkgJSONtext);
   // Used in inferno-server
   external.push('stream');
 
+  // Dependencies that have no UMD bundle of their own are bundled into the UMD targets only.
+  // The UMD targets get a stub of stream, see plugins/stream-stub.js
+  const umdBundledDependencies = rollupConfig.umdBundledDependencies || [];
+  const umdExternal = external.filter((name) => name !== 'stream' && !umdBundledDependencies.includes(name));
+
   const defaultOptions = {
     name: 'index',
     replace: true,
@@ -76,21 +81,13 @@ const pkgJSON = JSON.parse(pkgJSONtext);
 
   const targets = [
     //esmDev --name=index --ext=.dev.esm.js --env=development --format=es --minify=false
-    Object.assign({}, defaultOptions, { env: 'development', format: 'es', minify: false, ext: '.dev.esm.js' }),
+    Object.assign({}, defaultOptions, { env: 'development', format: 'es', minify: false, ext: '.dev.mjs' }),
     //esmProd --name=index --ext=.esm.js --env=production --format=es --minify=false
-    Object.assign({}, defaultOptions, { env: 'production', format: 'es', minify: false, ext: '.esm.js' }),
-    //esNext --name=index --ext=.esnext.js --env=production --format=es --esnext=true --minify=false
-    Object.assign({}, defaultOptions, {
-      env: 'production',
-      format: 'es',
-      esnext: true,
-      minify: false,
-      ext: '.esnext.js'
-    }),
+    Object.assign({}, defaultOptions, { env: 'production', format: 'es', minify: false, ext: '.mjs' }),
     //cjsDev --env=development --format=cjs --replace=true --name=index.cjs --minify=false
-    Object.assign({}, defaultOptions, { env: 'development', format: 'cjs', minify: false, ext: '.cjs.js' }),
+    Object.assign({}, defaultOptions, { env: 'development', format: 'cjs', minify: false, ext: '.cjs' }),
     //cjsProd --env=production --format=cjs --replace=true --name=index.cjs --minify=true --ext=.min.js
-    Object.assign({}, defaultOptions, { env: 'production', format: 'cjs', minify: true, ext: '.cjs.min.js' }),
+    Object.assign({}, defaultOptions, { env: 'production', format: 'cjs', minify: true, ext: '.min.cjs' }),
     //umdDev --minify=false
     Object.assign({}, defaultOptions, {
       env: 'development',
@@ -139,7 +136,7 @@ const pkgJSON = JSON.parse(pkgJSONtext);
     // Transform
     const { write } = await rollup({
       input: join(cwd, 'tmpDist/index.js'),
-      external: external,
+      external: options.format === 'umd' ? umdExternal : external,
       plugins: rollupPlugins
     }).catch(errorFunc);
 
@@ -154,23 +151,21 @@ const pkgJSON = JSON.parse(pkgJSONtext);
     // No name was provided for external module 'redux' in output.globals – guessing 'redux'
     // No name was provided for external module 'mobx' in output.globals – guessing 'mobx'
 
-    const bundleOptions = {
-      output: {
-        file: `dist/${filename}`,
-        format: options.format,
-        globals: Object.assign(moduleGlobals, rollupConfig.moduleGlobals),
-        name: rollupConfig.moduleName,
-        indent: true,
-        extend: true,
-        sourcemap: false
-      }
+    const outputOptions = {
+      file: `dist/${filename}`,
+      format: options.format,
+      globals: Object.assign(moduleGlobals, rollupConfig.moduleGlobals),
+      name: rollupConfig.moduleName,
+      indent: true,
+      extend: true,
+      sourcemap: false
     };
 
     if (options.format === 'cjs') {
-      bundleOptions.output.exports = 'named';
+      outputOptions.exports = 'named';
     }
 
-    await write(bundleOptions).catch(errorFunc);
+    await write(outputOptions).catch(errorFunc);
     console.log(`${pkgJSON.name} in ${options.name}${options.ext} is DONE`);
   }
 

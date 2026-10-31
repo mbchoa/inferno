@@ -14,20 +14,24 @@ describe('default prop typings', () => {
     document.body.removeChild(container);
   });
 
-  type MyComponentProps = {
+  interface MyComponentProps {
     name: string;
     value: number;
-  };
+  }
 
   class MyComponent extends Component<MyComponentProps, any> {
-    constructor(props, state) {
-      super(props, state);
+    constructor(props, context) {
+      super(props, context);
     }
 
     public static defaultProps = {
       name: 'custom-component',
-      value: 107
+      value: 107,
     };
+
+    public render() {
+      return null;
+    }
   }
 
   it('TSX Should not require properties from default props', () => {

@@ -1,8 +1,9 @@
 import { isString, isStringOrNumber } from 'inferno-shared';
+import { escapeText } from "./utils";
 
-export function renderStylesToString(styles: string | object): string {
+function parseStyleAsString(styles: string | object): string {
   if (isString(styles)) {
-    return styles;
+    return escapeText(styles);
   } else {
     let renderedString = '';
     for (const styleName in styles) {
@@ -14,4 +15,14 @@ export function renderStylesToString(styles: string | object): string {
     }
     return renderedString;
   }
+}
+
+export function renderStyleAttribute(styles: string | object): string {
+  const stylesString = parseStyleAsString(styles);
+
+  if (stylesString) {
+    return ` style="${stylesString}"`;
+  }
+
+  return '';
 }

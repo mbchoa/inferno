@@ -1,0 +1,201 @@
+import {
+  createComponentVNode,
+  createFragment,
+  createTextVNode,
+  createVNode,
+  getChildFlags,
+  render,
+  type VNode,
+} from 'inferno';
+import { ChildFlags, VNodeFlags } from 'inferno-vnode-flags';
+
+// ChildFlags are kept in bits of vNode.flags, a vNode has no field of its own for them
+describe('ChildFlags in vNode flags', () => {
+  let container;
+
+  beforeEach(function () {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+  });
+
+  afterEach(function () {
+    render(null, container);
+    container.innerHTML = '';
+    document.body.removeChild(container);
+  });
+
+  it('should have one VNodeFlags child bit for each ChildFlags value', () => {
+    const bits = [
+      VNodeFlags.HasInvalidChildren,
+      VNodeFlags.HasVNodeChildren,
+      VNodeFlags.HasNonKeyedChildren,
+      VNodeFlags.HasKeyedChildren,
+      VNodeFlags.HasTextChildren,
+    ];
+    let all = 0;
+
+    for (let i = 0, len = bits.length; i < len; ++i) {
+      const bit = bits[i];
+
+      // A single bit that no other child bit has
+      expect(bit & (bit - 1)).toBe(0);
+      expect(all & bit).toBe(0);
+      all |= bit;
+    }
+    expect(all).toBe(VNodeFlags.ChildFlagsMask);
+    expect(VNodeFlags.MultipleChildren).toBe(
+      VNodeFlags.HasNonKeyedChildren | VNodeFlags.HasKeyedChildren,
+    );
+  });
+
+  it('should keep the ChildFlags given to createVNode', () => {
+    const cases: Array<[ChildFlags, VNodeFlags, unknown]> = [
+      [ChildFlags.HasInvalidChildren, VNodeFlags.HasInvalidChildren, null],
+      [ChildFlags.HasVNodeChildren, VNodeFlags.HasVNodeChildren, <span />],
+      [
+        ChildFlags.HasNonKeyedChildren,
+        VNodeFlags.HasNonKeyedChildren,
+        [<span />, <span />],
+      ],
+      [
+        ChildFlags.HasKeyedChildren,
+        VNodeFlags.HasKeyedChildren,
+        [<span key="a" />, <span key="b" />],
+      ],
+      [ChildFlags.HasTextChildren, VNodeFlags.HasTextChildren, 'text'],
+    ];
+
+    for (let i = 0, len = cases.length; i < len; ++i) {
+      const [childFlags, bit, children] = cases[i];
+      const vNode = createVNode(
+        VNodeFlags.HtmlElement,
+        'div',
+        null,
+        children as any,
+        childFlags,
+      );
+
+      expect(getChildFlags(vNode)).toBe(childFlags);
+      expect(vNode.flags & VNodeFlags.ChildFlagsMask).toBe(bit);
+      expect(vNode.flags & VNodeFlags.HtmlElement).toBe(VNodeFlags.HtmlElement);
+    }
+  });
+
+  it('should set the ChildFlags of normalized children', () => {
+    function normalized(children): ChildFlags {
+      return getChildFlags(
+        createVNode(
+          VNodeFlags.HtmlElement,
+          'div',
+          null,
+          children,
+          ChildFlags.UnknownChildren,
+        ),
+      );
+    }
+
+    expect(normalized(null)).toBe(ChildFlags.HasInvalidChildren);
+    expect(normalized([])).toBe(ChildFlags.HasInvalidChildren);
+    expect(normalized('text')).toBe(ChildFlags.HasTextChildren);
+    expect(normalized(<span />)).toBe(ChildFlags.HasVNodeChildren);
+    expect(normalized([<span />, 'text'])).toBe(ChildFlags.HasKeyedChildren);
+  });
+
+  it('should set the ChildFlags of fragments and text', () => {
+    expect(
+      getChildFlags(createFragment(null, ChildFlags.HasInvalidChildren)),
+    ).toBe(ChildFlags.HasVNodeChildren);
+    expect(
+      getChildFlags(createFragment('text', ChildFlags.HasTextChildren)),
+    ).toBe(ChildFlags.HasNonKeyedChildren);
+    expect(
+      getChildFlags(
+        createFragment([<span />, <span />], ChildFlags.UnknownChildren),
+      ),
+    ).toBe(ChildFlags.HasKeyedChildren);
+    expect(getChildFlags(createTextVNode('text'))).toBe(
+      ChildFlags.HasInvalidChildren,
+    );
+  });
+
+  it('should not take the ChildFlags of flags copied from another vNode', () => {
+    const list = createVNode(
+      VNodeFlags.HtmlElement,
+      'div',
+      null,
+      [<span key="a" />, <span key="b" />],
+      ChildFlags.HasKeyedChildren,
+    );
+    const text = createVNode(
+      list.flags,
+      'div',
+      null,
+      'text',
+      ChildFlags.HasTextChildren,
+    );
+
+    expect(getChildFlags(text)).toBe(ChildFlags.HasTextChildren);
+    render(text, container);
+    expect(container.innerHTML).toBe('<div>text</div>');
+  });
+
+  it('should not take the InUse and Normalized bits of flags copied from a mounted vNode', () => {
+    function Italic() {
+      return <i />;
+    }
+    const items = [<span key="a" />, <Italic key="b" />];
+    render(<div>{items}</div>, container);
+    expect(items[0].flags & VNodeFlags.InUseOrNormalized).toBe(
+      VNodeFlags.InUseOrNormalized,
+    );
+    expect(items[1].flags & VNodeFlags.InUseOrNormalized).toBe(
+      VNodeFlags.InUseOrNormalized,
+    );
+
+    const element = createVNode(
+      items[0].flags,
+      'span',
+      null,
+      null,
+      ChildFlags.HasInvalidChildren,
+    );
+    const component = createComponentVNode(items[1].flags, Italic);
+    expect(element.flags & VNodeFlags.InUseOrNormalized).toBe(0);
+    expect(component.flags & VNodeFlags.InUseOrNormalized).toBe(0);
+
+    // Rendering mounts them, not clones of them
+    render(
+      <p>
+        {element}
+        {component}
+      </p>,
+      container,
+    );
+    expect(element.dom).toBe(container.querySelector('span'));
+    expect((component.children as VNode).dom).toBe(
+      container.querySelector('i'),
+    );
+  });
+
+  it('should patch an element in place when the shape of its children changes', () => {
+    render(<div>text</div>, container);
+    const dom = container.firstChild;
+
+    render(<div>{[<span key="a" />, <b key="b" />]}</div>, container);
+    expect(container.firstChild).toBe(dom);
+    expect(container.innerHTML).toBe('<div><span></span><b></b></div>');
+
+    render(
+      <div>
+        <i />
+      </div>,
+      container,
+    );
+    expect(container.firstChild).toBe(dom);
+    expect(container.innerHTML).toBe('<div><i></i></div>');
+
+    render(<div />, container);
+    expect(container.firstChild).toBe(dom);
+    expect(container.innerHTML).toBe('<div></div>');
+  });
+});

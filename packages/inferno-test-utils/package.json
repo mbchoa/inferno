@@ -1,7 +1,8 @@
 {
   "name": "inferno-test-utils",
-  "version": "8.0.1",
+  "version": "10.0.0",
   "license": "MIT",
+  "type": "module",
   "description": "Suite of utilities for testing Inferno applications",
   "author": {
     "name": "Matthew Wagerfield",
@@ -21,11 +22,11 @@
     "utils"
   ],
   "devDependencies": {
-    "inferno-shared": "8.0.1",
-    "inferno-vnode-flags": "8.0.1"
+    "inferno-shared": "workspace:*",
+    "inferno-vnode-flags": "workspace:*"
   },
   "dependencies": {
-    "inferno": "8.0.1"
+    "inferno": "workspace:*"
   },
   "rollup": {
     "bundledDependencies": [
@@ -38,18 +39,27 @@
     }
   },
   "files": [
-    "index.js",
+    "index.cjs",
     "dist/",
     "README.md",
     "package.json"
   ],
-  "main": "index.js",
-  "module": "dist/index.esm.js",
-  "dev:module": "dist/index.dev.esm.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./index.cjs"
+    },
+    "./dist/index.dev.mjs": "./dist/index.dev.mjs",
+    "./dist/index.mjs": "./dist/index.mjs"
+  },
+  "module": "dist/index.mjs",
+  "dev:module": "dist/index.dev.mjs",
   "typings": "dist/index.d.ts",
   "repository": {
     "type": "git",
     "url": "https://github.com/infernojs/inferno.git",
     "directory": "packages/inferno-test-utils"
-  }
+  },
+  "gitHead": "930f16301f6cdaa85e48641eed9ef49f799fc68a"
 }

@@ -1,58 +1,87 @@
-import type { VNode } from './../../core/types';
-import { combineFrom, isFunction, isNull, warning } from 'inferno-shared';
+import type { ContextObject, InfernoNode, VNode } from './../../core/types';
+import type { Component } from './../../core/component';
+import { isFunction, isNull, warning } from 'inferno-shared';
 import { createDerivedState, EMPTY_OBJ, getComponentName } from './common';
 import { VNodeFlags } from 'inferno-vnode-flags';
 import { normalizeRoot } from '../../core/implementation';
 
-function warnAboutOldLifecycles(component) {
+function warnAboutOldLifecycles(component: any): void {
   const oldLifecycles: string[] = [];
 
   // Don't warn about react polyfilled components.
-  if (component.componentWillMount && component.componentWillMount.__suppressDeprecationWarning !== true) {
+  if (
+    component.componentWillMount &&
+    component.componentWillMount.__suppressDeprecationWarning !== true
+  ) {
     oldLifecycles.push('componentWillMount');
   }
 
-  if (component.componentWillReceiveProps && component.componentWillReceiveProps.__suppressDeprecationWarning !== true) {
+  if (
+    component.componentWillReceiveProps &&
+    component.componentWillReceiveProps.__suppressDeprecationWarning !== true
+  ) {
     oldLifecycles.push('componentWillReceiveProps');
   }
 
-  if (component.componentWillUpdate && component.componentWillUpdate.__suppressDeprecationWarning !== true) {
+  if (
+    component.componentWillUpdate &&
+    component.componentWillUpdate.__suppressDeprecationWarning !== true
+  ) {
     oldLifecycles.push('componentWillUpdate');
   }
 
   if (oldLifecycles.length > 0) {
     warning(`
       Warning: Unsafe legacy lifecycles will not be called for components using new component APIs.
-      ${getComponentName(component)} contains the following legacy lifecycles:
+      ${getComponentName(component.constructor)} contains the following legacy lifecycles:
       ${oldLifecycles.join('\n')}
       The above lifecycles should be removed.
     `);
   }
 }
 
-export function renderNewInput(instance, props, context) {
-  const nextInput = normalizeRoot(instance.render(props, instance.state, context));
+export function renderNewInput(
+  instance,
+  props,
+  context,
+  lastInput?: VNode,
+): VNode {
+  const nextInput = normalizeRoot(
+    instance.render(props, instance.state, context),
+    lastInput,
+  );
 
   let childContext = context;
   if (isFunction(instance.getChildContext)) {
-    childContext = combineFrom(context, instance.getChildContext());
+    childContext = { ...context, ...instance.getChildContext() };
   }
   instance.$CX = childContext;
 
   return nextInput;
 }
 
-export function createClassComponentInstance(vNode: VNode, Component, props, context: Object, isSVG: boolean, lifecycle: Function[]) {
-  const instance = new Component(props, context);
-  const usesNewAPI = (instance.$N = Boolean(Component.getDerivedStateFromProps || instance.getSnapshotBeforeUpdate));
+export function createClassComponentInstance(
+  vNode: VNode,
+  ComponentCtr,
+  props,
+  context: ContextObject,
+  isSVG: boolean,
+  lifecycle: Array<() => void>,
+): Component<any, any> {
+  const instance = new ComponentCtr(props, context);
+  const usesNewAPI = (instance.$N = Boolean(
+    ComponentCtr.getDerivedStateFromProps || instance.getSnapshotBeforeUpdate,
+  ));
 
   instance.$SVG = isSVG;
   instance.$L = lifecycle;
 
   if (process.env.NODE_ENV !== 'production') {
-    if ((instance as any).getDerivedStateFromProps) {
+    if (instance.getDerivedStateFromProps) {
       warning(
-        `${getComponentName(instance)} getDerivedStateFromProps() is defined as an instance method and will be ignored. Instead, declare it as a static method.`
+        `${getComponentName(
+          ComponentCtr,
+        )} getDerivedStateFromProps() is defined as an instance method and will be ignored. Instead, declare it as a static method.`,
       );
     }
     if (usesNewAPI) {
@@ -60,7 +89,7 @@ export function createClassComponentInstance(vNode: VNode, Component, props, con
     }
   }
 
-  vNode.children = instance as any;
+  vNode.children = instance;
   instance.$BS = false;
   instance.context = context;
   if (instance.props === EMPTY_OBJ) {
@@ -71,7 +100,7 @@ export function createClassComponentInstance(vNode: VNode, Component, props, con
       instance.$BR = true;
       instance.componentWillMount();
 
-      const pending = instance.$PS as any;
+      const pending = instance.$PS;
 
       if (!isNull(pending)) {
         const state = instance.state;
@@ -97,7 +126,12 @@ export function createClassComponentInstance(vNode: VNode, Component, props, con
   return instance;
 }
 
-export function renderFunctionalComponent(vNode: VNode, context) {
+export function renderFunctionalComponent(
+  vNode: VNode,
+  context: ContextObject,
+): InfernoNode {
   const props = vNode.props || EMPTY_OBJ;
-  return vNode.flags & VNodeFlags.ForwardRef ? vNode.type.render(props, vNode.ref, context) : vNode.type(props, context);
+  return vNode.flags & VNodeFlags.ForwardRef
+    ? vNode.type.render(props, vNode.ref, context)
+    : vNode.type(props, context);
 }

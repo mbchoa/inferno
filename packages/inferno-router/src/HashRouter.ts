@@ -1,11 +1,17 @@
-import { Component, createComponentVNode, Inferno, VNode } from 'inferno';
+import {
+  Component,
+  type InfernoNode,
+  newComponentVNode,
+  type VNode,
+} from 'inferno';
 import { VNodeFlags } from 'inferno-vnode-flags';
 import { createHashHistory } from 'history';
-import { Router } from './Router';
+import { Router, type GetUserConfirmation } from './Router';
 import { warning } from './utils';
 
 export interface IHashRouterProps {
-  children: Inferno.InfernoNode;
+  getUserConfirmation?: GetUserConfirmation;
+  children: InfernoNode;
 }
 
 export class HashRouter extends Component<IHashRouterProps, any> {
@@ -17,10 +23,15 @@ export class HashRouter extends Component<IHashRouterProps, any> {
   }
 
   public render(): VNode {
-    return createComponentVNode(VNodeFlags.ComponentClass, Router, {
-      children: this.props.children,
-      history: this.history
-    });
+    return newComponentVNode(
+      VNodeFlags.ComponentClass | VNodeFlags.HasInvalidChildren,
+      Router,
+      {
+        children: this.props.children,
+        history: this.history,
+        getUserConfirmation: this.props.getUserConfirmation,
+      },
+    );
   }
 }
 
@@ -28,7 +39,8 @@ if (process.env.NODE_ENV !== 'production') {
   HashRouter.prototype.componentWillMount = function () {
     warning(
       !this.props.history,
-      '<HashRouter> ignores the history prop. To use a custom history, ' + 'use `import { Router }` instead of `import { HashRouter as Router }`.'
+      '<HashRouter> ignores the history prop. To use a custom history, ' +
+        'use `import { Router }` instead of `import { HashRouter as Router }`.',
     );
   };
 }

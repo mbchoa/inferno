@@ -1,4 +1,4 @@
-import { Store, Unsubscribe } from 'redux';
+import { type Store, type Unsubscribe } from 'redux';
 
 export type Listener = () => void;
 
@@ -9,14 +9,13 @@ interface IListenerCollection {
 }
 
 const CLEARED = null;
-// tslint:disable-next-line:no-empty
 const nullSubscriptionHandler: Unsubscribe = () => {};
 const nullListenerCollection: IListenerCollection = {
-  // tslint:disable-next-line:no-empty
   clear: () => {},
-  // tslint:disable-next-line:no-empty
   notify: () => {},
-  subscribe: (_: Listener) => nullSubscriptionHandler
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  subscribe: (_listener: Listener) => nullSubscriptionHandler,
 };
 
 const createListenerCollection = (): IListenerCollection => {
@@ -32,8 +31,9 @@ const createListenerCollection = (): IListenerCollection => {
 
     notify: () => {
       const listeners = (current = next!);
-      for (let i = 0; i < listeners.length; ++i) {
-        listeners[i]();
+      for (let i = 0, len = listeners.length; i < len; ++i) {
+        const listener = listeners[i];
+        listener();
       }
     },
 
@@ -55,17 +55,21 @@ const createListenerCollection = (): IListenerCollection => {
         }
         next!.splice(next!.indexOf(listener), 1);
       };
-    }
+    },
   };
 };
 
 export class Subscription {
-  private store: Store<any>;
-  private parentSub: Subscription | null;
-  private onStateChange: () => void;
+  private readonly store: Store<any>;
+  private readonly parentSub: Subscription | null;
+  private readonly onStateChange: () => void;
   private unsubscribe: Unsubscribe | null;
   private listeners: IListenerCollection;
-  constructor(store: Store<any>, parentSub: Subscription | null, onStateChange: () => void) {
+  constructor(
+    store: Store<any>,
+    parentSub: Subscription | null,
+    onStateChange: () => void,
+  ) {
     this.store = store;
     this.parentSub = parentSub;
     this.onStateChange = onStateChange;
@@ -73,28 +77,30 @@ export class Subscription {
     this.listeners = nullListenerCollection;
   }
 
-  public addNestedSub(listener) {
+  public addNestedSub(listener): Unsubscribe {
     this.trySubscribe();
     return this.listeners.subscribe(listener);
   }
 
-  public notifyNestedSubs() {
+  public notifyNestedSubs(): void {
     this.listeners.notify();
   }
 
-  public isSubscribed() {
+  public isSubscribed(): boolean {
     return Boolean(this.unsubscribe);
   }
 
-  public trySubscribe() {
+  public trySubscribe(): void {
     if (!this.unsubscribe) {
-      this.unsubscribe = this.parentSub ? this.parentSub.addNestedSub(this.onStateChange) : this.store.subscribe(this.onStateChange);
+      this.unsubscribe = this.parentSub
+        ? this.parentSub.addNestedSub(this.onStateChange)
+        : this.store.subscribe(this.onStateChange);
 
       this.listeners = createListenerCollection();
     }
   }
 
-  public tryUnsubscribe() {
+  public tryUnsubscribe(): void {
     if (this.unsubscribe) {
       this.unsubscribe();
       this.unsubscribe = null;

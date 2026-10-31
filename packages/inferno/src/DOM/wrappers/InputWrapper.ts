@@ -8,24 +8,26 @@ export function isCheckedType(type): boolean {
 
 const onTextInputChange = createWrappedFunction('onInput', applyValueInput);
 
-const wrappedOnChange = createWrappedFunction(['onClick', 'onChange'], applyValueInput);
+const wrappedOnChange = createWrappedFunction(
+  ['onClick', 'onChange'],
+  applyValueInput,
+);
 
-/* tslint:disable-next-line:no-empty */
-function emptywrapper(event) {
+function stopPropagationWrapper(event) {
   event.stopPropagation();
 }
-(emptywrapper as any).wrapped = true;
+(stopPropagationWrapper as any).wrapped = true;
 
-export function inputEvents(dom, nextPropsOrEmpty) {
+export function inputEvents(dom, nextPropsOrEmpty): void {
   if (isCheckedType(nextPropsOrEmpty.type)) {
     attachEvent(dom, 'change', wrappedOnChange);
-    attachEvent(dom, 'click', emptywrapper);
+    attachEvent(dom, 'click', stopPropagationWrapper);
   } else {
     attachEvent(dom, 'input', onTextInputChange);
   }
 }
 
-export function applyValueInput(nextPropsOrEmpty, dom) {
+export function applyValueInput(nextPropsOrEmpty, dom): void {
   const type = nextPropsOrEmpty.type;
   const value = nextPropsOrEmpty.value;
   const checked = nextPropsOrEmpty.checked;
@@ -33,7 +35,7 @@ export function applyValueInput(nextPropsOrEmpty, dom) {
   const defaultValue = nextPropsOrEmpty.defaultValue;
   const hasValue = !isNullOrUndef(value);
 
-  if (type && type !== dom.type) {
+  if (type != null && type !== dom.type) {
     dom.setAttribute('type', type);
   }
   if (!isNullOrUndef(multiple) && multiple !== dom.multiple) {

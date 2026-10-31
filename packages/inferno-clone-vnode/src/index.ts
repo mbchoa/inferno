@@ -1,26 +1,33 @@
-import { createComponentVNode, createFragment, createTextVNode, createVNode, EMPTY_OBJ, normalizeProps, VNode } from 'inferno';
-import { combineFrom } from 'inferno-shared';
-import { ChildFlags, VNodeFlags } from 'inferno-vnode-flags';
+import {
+  newComponentVNode,
+  newFragment,
+  newTextVNode,
+  newVNode,
+  normalizeProps,
+  type VNode,
+} from 'inferno';
+import { VNodeFlags } from 'inferno-vnode-flags';
 
 /*
  directClone is preferred over cloneVNode and used internally also.
  This function makes Inferno backwards compatible.
  And can be tree-shaked by modern bundlers
-
- Would be nice to combine this with directClone but could not do it without breaking change
 */
 
 /**
  * Clones given virtual node by creating new instance of it
  * @param {VNode} vNodeToClone virtual node to be cloned
  * @param {Props=} props additional props for new virtual node
- * @param {...*} _children new children for new virtual node
+ * @param {...*} childArgs new children for new virtual node
  * @returns {VNode} new virtual node
  */
-export function cloneVNode(vNodeToClone: VNode, props?, _children?): VNode {
+export function cloneVNode(vNodeToClone: VNode, props?, ...childArgs): VNode {
   const flags = vNodeToClone.flags;
-  let children = flags & VNodeFlags.Component ? vNodeToClone.props && vNodeToClone.props.children : vNodeToClone.children;
-  let childLen = arguments.length - 2;
+  let children =
+    flags & VNodeFlags.Component
+      ? vNodeToClone.props?.children
+      : vNodeToClone.children;
+  const childLen = childArgs.length;
   let className = vNodeToClone.className;
   let key = vNodeToClone.key;
   let ref = vNodeToClone.ref;
@@ -37,35 +44,54 @@ export function cloneVNode(vNodeToClone: VNode, props?, _children?): VNode {
     if (props.children !== void 0) {
       children = props.children;
     }
-  } else {
-    props = {};
   }
 
   if (childLen === 1) {
-    children = _children;
+    children = childArgs[0];
   } else if (childLen > 1) {
     children = [];
 
-    while (childLen-- > 0) {
-      children[childLen] = arguments[childLen + 2];
+    for (let i = 0, len = childArgs.length; i < len; ++i) {
+      const child = childArgs[i];
+      children.push(child);
     }
   }
 
-  props.children = children;
-
+  // The props passed in are not changed, they may be shared between clones
   if (flags & VNodeFlags.Component) {
-    return createComponentVNode(flags, vNodeToClone.type, !vNodeToClone.props && !props ? EMPTY_OBJ : combineFrom(vNodeToClone.props, props), key, ref);
+    return newComponentVNode(
+      // The clone's flags must not keep the children's shape or the validation of vNodeToClone
+      (flags & VNodeFlags.ClearOnCopy) | VNodeFlags.HasInvalidChildren,
+      vNodeToClone.type,
+      { ...vNodeToClone.props, ...props, children },
+      key,
+      ref,
+    );
   }
 
   if (flags & VNodeFlags.Text) {
-    return createTextVNode(children);
+    return newTextVNode(children);
   }
 
   if (flags & VNodeFlags.Fragment) {
-    return createFragment(childLen === 1 ? [children] : children, ChildFlags.UnknownChildren, key);
+    // No child bit, the children are normalized
+    return newFragment(
+      VNodeFlags.Fragment,
+      childLen === 1 ? [children] : children,
+      key,
+    );
   }
 
   return normalizeProps(
-    createVNode(flags, vNodeToClone.type, className, null, ChildFlags.HasInvalidChildren, combineFrom(vNodeToClone.props, props), key, ref)
+    newVNode(
+      // normalizeProps sets the children from props
+      (flags & VNodeFlags.ClearOnCopy) | VNodeFlags.HasInvalidChildren,
+      vNodeToClone.type,
+      className,
+      null,
+      { ...vNodeToClone.props, ...props, children },
+      key,
+      ref,
+    ),
   );
 }

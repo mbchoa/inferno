@@ -6,7 +6,7 @@ let renderCount = 0;
 class TestCWRP extends Component<any, any> {
   public state = {
     a: 0,
-    b: 0
+    b: 0,
   };
 
   constructor(props) {
@@ -54,6 +54,10 @@ describe('state', () => {
 
         expect(this.state).toBeNull();
       }
+
+      public render() {
+        return null;
+      }
     }
 
     const f = new Foo({}, {});
@@ -63,14 +67,17 @@ describe('state', () => {
 
   describe('setting state', () => {
     it('setState should apply state during componentWillReceiveProps', (done) => {
-      render(createComponentVNode(VNodeFlags.ComponentClass, TestCWRP, {}), container);
+      render(
+        createComponentVNode(VNodeFlags.ComponentClass, TestCWRP, {}),
+        container,
+      );
       expect(renderCount).toBe(1);
 
       render(
         createComponentVNode(VNodeFlags.ComponentClass, TestCWRP, {
-          foo: 1
+          foo: 1,
         }),
-        container
+        container,
       );
       expect(renderCount).toBe(2);
       done();
@@ -78,10 +85,10 @@ describe('state', () => {
   });
 
   describe('didUpdate and setState', () => {
-    it('order', (done) => {
+    it('Should pass pre-update prevState to componentDidUpdate after setState in componentWillReceiveProps', (done) => {
       class Test extends Component<{ scrollTop: number }, any> {
         public state = {
-          testScrollTop: 0
+          testScrollTop: 0,
         };
 
         constructor(props, context) {
@@ -104,9 +111,12 @@ describe('state', () => {
         }
       }
 
-      class Example extends Component<{ name: string }, { exampleScrollTop: number }> {
+      class Example extends Component<
+        { name: string },
+        { exampleScrollTop: number }
+      > {
         public state = {
-          exampleScrollTop: 0
+          exampleScrollTop: 0,
         };
 
         constructor(props, context) {

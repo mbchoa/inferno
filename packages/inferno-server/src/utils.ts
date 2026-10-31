@@ -1,8 +1,8 @@
-import { combineFrom } from 'inferno-shared';
-import { EMPTY_OBJ, VNode } from 'inferno';
+import { EMPTY_OBJ, type InfernoNode, newFragment, type VNode } from 'inferno';
+import { isArray, isFunction, isNullOrUndef, throwError } from 'inferno-shared';
 import { VNodeFlags } from 'inferno-vnode-flags';
 
-const rxUnescaped = new RegExp(/["'&<>]/);
+const rxUnescaped = /["'&<>]/;
 
 export function escapeText(text: string): string {
   /* Much faster when there is no unescaped characters */
@@ -11,10 +11,12 @@ export function escapeText(text: string): string {
   }
 
   let result = '';
+  // assigning empty string here tells JIT this is text
+  // eslint-disable-next-line no-useless-assignment
   let escape = '';
   let start = 0;
-  let i;
-  for (i = 0; i < text.length; ++i) {
+  let i = 0;
+  for (; i < text.length; ++i) {
     switch (text.charCodeAt(i)) {
       case 34: // "
         escape = '&quot;';
@@ -51,15 +53,58 @@ export function getCssPropertyName(str): string {
   if (CssPropCache[str] !== void 0) {
     return CssPropCache[str];
   }
-  return (CssPropCache[str] = str.replace(uppercasePattern, '-$&').toLowerCase() + ':');
+  return (CssPropCache[str] =
+    str.replace(uppercasePattern, '-$&').toLowerCase() + ':');
 }
 
 const ATTRIBUTE_NAME_START_CHAR =
   ':A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD';
 
-const ATTRIBUTE_NAME_CHAR = ATTRIBUTE_NAME_START_CHAR + '\\-.0-9\\u00B7\\u0300-\\u036F\\u203F-\\u2040';
+const ATTRIBUTE_NAME_CHAR =
+  ATTRIBUTE_NAME_START_CHAR + '\\-.0-9\\u00B7\\u0300-\\u036F\\u203F-\\u2040';
 
-export const VALID_ATTRIBUTE_NAME_REGEX = new RegExp('^[' + ATTRIBUTE_NAME_START_CHAR + '][' + ATTRIBUTE_NAME_CHAR + ']*$');
+export const VALID_ATTRIBUTE_NAME_REGEX = new RegExp(
+  // eslint-disable-next-line no-misleading-character-class
+  '^[' + ATTRIBUTE_NAME_START_CHAR + '][' + ATTRIBUTE_NAME_CHAR + ']*$',
+);
+
+const rxUnsafeTagName = /[\s\n/='"\0<>]/;
+
+// Called before anything of the element is rendered, so an unsafe tag never reaches the output
+export function validateTagName(type: string): void {
+  if (rxUnsafeTagName.test(type)) {
+    throwError(`Invalid tag name <${type}>`);
+  }
+}
+
+// A textarea has no value attribute, its value (or defaultValue) is rendered as its content
+export function getTextareaContent(props): string | undefined {
+  const value = isNullOrUndef(props.value) ? props.defaultValue : props.value;
+
+  return isNullOrUndef(value) ? undefined : escapeText(String(value));
+}
+
+// selectValue is the value of the nearest <select>, which selects the options that have the same value.
+// An array value of a multiple select selects every option in it, as on the client.
+export function isSelectedOption(type, props, selectValue): boolean {
+  if (type !== 'option' || typeof props.value === 'undefined') {
+    return false;
+  }
+
+  return (
+    props.value === selectValue ||
+    (isArray(selectValue) && selectValue.includes(props.value))
+  );
+}
+
+// Like the client on mount, the select falls back to its defaultValue
+export function getChildSelectValue(type, props, selectValue): unknown {
+  if (type !== 'select') {
+    return selectValue;
+  }
+
+  return isNullOrUndef(props?.value) ? props?.defaultValue : props.value;
+}
 
 const illegalAttributeNameCache = {};
 const validatedAttributeNameCache = {};
@@ -77,7 +122,6 @@ export function isAttributeNameSafe(attributeName: string): boolean {
   }
   illegalAttributeNameCache[attributeName] = true;
   if (process.env.NODE_ENV !== 'production') {
-    // tslint:disable-next-line:no-console
     console.log('Invalid attribute name: ' + attributeName);
   }
   return false;
@@ -99,18 +143,60 @@ export const voidElements = new Set([
   'param',
   'source',
   'track',
-  'wbr'
+  'wbr',
 ]);
 
-export function createDerivedState(instance, nextProps, state) {
+// Same check as the client: these components skip the legacy lifecycles
+export function usesNewAPI(type, instance): boolean {
+  return Boolean(
+    type.getDerivedStateFromProps || instance.getSnapshotBeforeUpdate,
+  );
+}
+
+// Called after render, the same as on the client, so it sees the state set before render
+export function getChildContext(instance, context): Record<string, unknown> {
+  const childContext = isFunction(instance.getChildContext)
+    ? instance.getChildContext()
+    : null;
+
+  return isNullOrUndef(childContext)
+    ? context
+    : { ...context, ...childContext };
+}
+
+export function createDerivedState(
+  instance,
+  nextProps,
+  state,
+): Record<string, unknown> {
   if (instance.constructor.getDerivedStateFromProps) {
-    return combineFrom(state, instance.constructor.getDerivedStateFromProps(nextProps, state));
+    return {
+      ...state,
+      ...instance.constructor.getDerivedStateFromProps(nextProps, state),
+    };
   }
 
   return state;
 }
 
-export function renderFunctionalComponent(vNode: VNode, context) {
+// Arrays are rendered as the Fragments they are normalized to in the browser
+export function arrayToFragment(vNode) {
+  return isArray(vNode) ? newFragment(VNodeFlags.Fragment, vNode) : vNode;
+}
+
+// Fragment without DOM nodes renders a placeholder, which hydration replaces with an empty text node
+export function isEmptyFragment(vNode: VNode): boolean {
+  const children = vNode.children as any;
+
+  if ((vNode.flags & VNodeFlags.HasVNodeChildren) !== 0) {
+    return (children.flags & VNodeFlags.Text) !== 0 && children.children === '';
+  }
+  return children.length === 0;
+}
+
+export function renderFunctionalComponent(vNode: VNode, context): InfernoNode {
   const props = vNode.props || EMPTY_OBJ;
-  return vNode.flags & VNodeFlags.ForwardRef ? vNode.type.render(props, vNode.ref, context) : vNode.type(props, context);
+  return vNode.flags & VNodeFlags.ForwardRef
+    ? vNode.type.render(props, vNode.ref, context)
+    : vNode.type(props, context);
 }

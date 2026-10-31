@@ -1,7 +1,8 @@
 {
   "name": "inferno",
-  "version": "8.0.1",
+  "version": "10.0.0",
   "license": "MIT",
+  "type": "module",
   "description": "An extremely fast, React-like JavaScript library for building modern user interfaces",
   "author": {
     "name": "Dominic Gannaway",
@@ -9,6 +10,10 @@
   },
   "bugs": {
     "url": "https://github.com/infernojs/inferno/issues"
+  },
+  "funding": {
+    "type": "opencollective",
+    "url": "https://opencollective.com/inferno"
   },
   "homepage": "https://github.com/infernojs/inferno#readme",
   "keywords": [
@@ -41,15 +46,23 @@
     "moduleName": "Inferno"
   },
   "files": [
-    "index.js",
-    "index.esm.js",
+    "index.cjs",
+    "index.mjs",
     "dist/",
     "README.md",
     "package.json"
   ],
-  "main": "index.js",
-  "module": "index.esm.js",
-  "dev:module": "dist/index.dev.esm.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./index.mjs",
+      "require": "./index.cjs"
+    },
+    "./dist/index.dev.mjs": "./dist/index.dev.mjs",
+    "./dist/index.mjs": "./dist/index.mjs"
+  },
+  "module": "index.mjs",
+  "dev:module": "dist/index.dev.mjs",
   "typings": "dist/index.d.ts",
   "repository": {
     "type": "git",
@@ -57,11 +70,13 @@
     "directory": "packages/inferno"
   },
   "devDependencies": {
-    "inferno-utils": "8.0.1"
+    "inferno-shared": "workspace:*",
+    "inferno-utils": "workspace:*"
   },
   "dependencies": {
-    "inferno-shared": "8.0.1",
-    "inferno-vnode-flags": "8.0.1",
+    "csstype": "^3.2.3",
+    "inferno-vnode-flags": "workspace:*",
     "opencollective-postinstall": "^2.0.3"
-  }
+  },
+  "gitHead": "930f16301f6cdaa85e48641eed9ef49f799fc68a"
 }

@@ -1,78 +1,112 @@
-import { Component, createComponentVNode, Props, VNode } from 'inferno';
+import {
+  Component,
+  type InfernoNode,
+  newComponentVNode,
+  type Props,
+} from 'inferno';
 import { VNodeFlags } from 'inferno-vnode-flags';
-import { parsePath } from 'history';
-import { Router } from './Router';
+import { Action, type Location, parsePath, type Path } from 'history';
+import { Router, type TLoaderData } from './Router';
 import { combinePath, invariant, warning } from './utils';
-import { combineFrom, isString } from 'inferno-shared';
+import { isString } from 'inferno-shared';
 
-function addLeadingSlash(path) {
+function addLeadingSlash(path: string): string {
   return path.charAt(0) === '/' ? path : '/' + path;
 }
 
-// tslint:disable-next-line:no-empty
-const noop = () => {};
+const noop = (): void => {};
 
 export interface IStaticRouterProps<T> extends Props<T> {
+  initialData?: Record<string, TLoaderData>;
   basename?: string;
   context: any;
   location: any;
 }
 
-export class StaticRouter<S> extends Component<IStaticRouterProps<any>, S> {
-  public static defaultProps = {
+export class StaticRouter<P, S> extends Component<
+  P & IStaticRouterProps<any>,
+  S
+> {
+  public static defaultProps: {
+    basename: string;
+    location: Path | string;
+  } = {
     basename: '',
-    location: '/'
+    location: '/',
   };
 
-  public getChildContext() {
+  public getChildContext(): {
+    router: {
+      initialData?: Record<string, TLoaderData>;
+      staticContext: Record<string, unknown>;
+    };
+  } {
     return {
       router: {
-        staticContext: this.props.context
-      }
+        initialData: this.props.initialData,
+        staticContext: this.props.context,
+      },
     };
   }
 
-  public createHref = (path) => addLeadingSlash((this.props.basename || '') + createURL(path));
+  public createHref = (path: string): string =>
+    addLeadingSlash((this.props.basename || '') + createURL(path));
 
-  public handlePush = (location) => {
+  public handlePush = (location): void => {
     const { basename, context } = this.props;
     context.action = 'PUSH';
-    context.location = addBasename(basename, isString(location) ? parsePath(location) : location);
+    context.location = addBasename(
+      basename,
+      isString(location) ? parsePath(location) : location,
+    );
     context.url = createURL(context.location);
   };
 
-  public handleReplace = (location) => {
+  public handleReplace = (location): void => {
     const { basename, context } = this.props;
     context.action = 'REPLACE';
-    context.location = addBasename(basename, isString(location) ? parsePath(location) : location);
+    context.location = addBasename(
+      basename,
+      isString(location) ? parsePath(location) : location,
+    );
     context.url = createURL(context.location);
   };
 
-  // tslint:disable-next-line:no-empty
-  public handleListen = () => noop;
+  public handleListen = (): (() => void) => noop;
 
-  // tslint:disable-next-line:no-empty
-  public handleBlock = () => noop;
+  public handleBlock = (): (() => void) => noop;
 
-  public render({ basename, context, location, ...props }): VNode {
-    return createComponentVNode(
-      VNodeFlags.ComponentClass,
+  public render({
+    basename,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    context,
+    location,
+    ...props
+  }: Readonly<
+    { children: InfernoNode } & P & IStaticRouterProps<any>
+  >): InfernoNode {
+    return newComponentVNode(
+      VNodeFlags.ComponentClass | VNodeFlags.HasInvalidChildren,
       Router,
-      combineFrom(props, {
+      {
+        ...props,
         history: {
-          action: 'POP',
+          action: Action.Pop,
           block: this.handleBlock,
           createHref: this.createHref,
           go: staticHandler('go'),
-          goBack: staticHandler('goBack'),
-          goForward: staticHandler('goForward'),
+          back: staticHandler('goBack'),
+          forward: staticHandler('goForward'),
           listen: this.handleListen,
-          location: stripBasename(basename, createLocation(location)),
+          location: stripBasename(
+            basename,
+            createLocation(location),
+          ) as Location,
           push: this.handlePush,
-          replace: this.handleReplace
-        }
-      })
-    );
+          replace: this.handleReplace,
+        },
+      },
+    ) as InfernoNode;
   }
 }
 
@@ -80,47 +114,67 @@ if (process.env.NODE_ENV !== 'production') {
   StaticRouter.prototype.componentWillMount = function () {
     warning(
       !this.props.history,
-      '<StaticRouter> ignores the history prop. To use a custom history, ' + 'use `import { Router }` instead of `import { StaticRouter as Router }`.'
+      '<StaticRouter> ignores the history prop. To use a custom history, ' +
+        'use `import { Router }` instead of `import { StaticRouter as Router }`.',
     );
   };
 }
 
-function normalizeLocation({ pathname = '/', search, hash }) {
+function normalizeLocation({ pathname = '/', search, hash }): Path {
   return {
     hash: (hash || '') === '#' ? '' : hash,
     pathname,
-    search: (search || '') === '?' ? '' : search
+    search: (search || '') === '?' ? '' : search,
   };
 }
 
-function addBasename(basename, location) {
+function addBasename(
+  basename: string | null | undefined,
+  location: Location,
+): Location {
   if (!basename) {
     return location;
   }
 
-  return combineFrom(location, { pathname: addLeadingSlash(basename) + location.pathname });
+  return {
+    ...location,
+    pathname: addLeadingSlash(basename) + location.pathname,
+  };
 }
 
-function stripBasename(basename, location) {
+function stripBasename(
+  basename: string | undefined | null,
+  location: Path,
+): Path {
   if (!basename) {
     return location;
   }
 
   const base = addLeadingSlash(basename);
+  const pathname = location.pathname;
 
-  if (location.pathname.indexOf(base) !== 0) {
+  // Only a whole path segment: basename /app is not the start of /application
+  if (
+    pathname.startsWith(base) &&
+    (pathname.length === base.length || pathname.charAt(base.length) === '/')
+  ) {
+    return {
+      ...location,
+      pathname: addLeadingSlash(pathname.substring(base.length)),
+    };
+  } else {
     return location;
   }
-
-  return combineFrom(location, { pathname: location.pathname.substr(base.length) });
 }
 
-function createLocation(location) {
-  return typeof location === 'string' ? parsePath(location) : normalizeLocation(location);
+function createLocation(location): Path {
+  return isString(location)
+    ? (parsePath(location) as Path)
+    : normalizeLocation(location);
 }
 
-function createURL(location) {
-  return typeof location === 'string' ? location : combinePath(location);
+function createURL(location): string {
+  return isString(location) ? location : combinePath(location);
 }
 
 function staticHandler(methodName) {

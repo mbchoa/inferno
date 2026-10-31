@@ -1,5 +1,6 @@
-import { render } from 'inferno';
-import { MemoryRouter, NavLink } from 'inferno-router';
+import { createMemoryHistory } from 'history';
+import { Component, type InfernoNode, render } from 'inferno';
+import { HashRouter, MemoryRouter, NavLink } from 'inferno-router';
 
 describe('NavLink', () => {
   let node;
@@ -20,7 +21,7 @@ describe('NavLink', () => {
         <MemoryRouter initialEntries={['/pizza']}>
           <NavLink to="/pizza">Pizza!</NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).toEqual('active');
@@ -33,7 +34,7 @@ describe('NavLink', () => {
             Pizza!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).not.toContain('active');
@@ -50,7 +51,7 @@ describe('NavLink', () => {
             Pizza!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.style.color).toBe(activeStyle.color);
@@ -65,7 +66,7 @@ describe('NavLink', () => {
             Salad?
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).not.toContain('active');
@@ -78,7 +79,7 @@ describe('NavLink', () => {
             Salad?
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).not.toContain('active');
@@ -95,7 +96,7 @@ describe('NavLink', () => {
             Salad?
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.style.color).toBe(defaultStyle.color);
@@ -110,7 +111,7 @@ describe('NavLink', () => {
             Pizza!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).toEqual('active');
@@ -123,7 +124,7 @@ describe('NavLink', () => {
             Pizza!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).not.toContain('active');
@@ -137,7 +138,7 @@ describe('NavLink', () => {
             Pizza!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).not.toContain('active');
@@ -146,16 +147,96 @@ describe('NavLink', () => {
     it('does not apply active passed props when isActive returns false', () => {
       render(
         <MemoryRouter initialEntries={['/pizza']}>
-          <NavLink to="/pizza" activeClassName="selected" isActive={() => false}>
+          <NavLink
+            to="/pizza"
+            activeClassName="selected"
+            isActive={() => false}
+          >
             Pizza!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).not.toContain('active');
       expect(a.className).not.toContain('selected');
     });
+  });
+
+  it('applies the active result of a className function when active', () => {
+    render(
+      <MemoryRouter initialEntries={['/pizza']}>
+        <NavLink
+          to="/pizza"
+          className={(isActive: boolean) =>
+            isActive ? 'active-pizza' : 'chill-pizza'
+          }
+        >
+          Pizza!
+        </NavLink>
+      </MemoryRouter>,
+      node,
+    );
+
+    const a = node.querySelector('a');
+    expect(a.className).toContain('active-pizza');
+  });
+
+  it('applies the active result of a style function when active', () => {
+    const defaultStyle = { color: 'black' };
+    const activeStyle = { color: 'red' };
+
+    render(
+      <MemoryRouter initialEntries={['/pizza']}>
+        <NavLink
+          to="/pizza"
+          style={(isActive) => (isActive ? activeStyle : defaultStyle)}
+        >
+          Pizza!
+        </NavLink>
+      </MemoryRouter>,
+      node,
+    );
+
+    const a = node.querySelector('a');
+    expect(a.style.color).toBe(activeStyle.color);
+  });
+
+  it('applies the inactive result of a className function when not active', () => {
+    render(
+      <MemoryRouter initialEntries={['/pizza']}>
+        <NavLink
+          to="/salad"
+          className={(isActive) => (isActive ? 'active-salad' : 'chill-salad')}
+        >
+          Salad?
+        </NavLink>
+      </MemoryRouter>,
+      node,
+    );
+
+    const a = node.querySelector('a');
+    expect(a.className).toContain('chill-salad');
+  });
+
+  it('applies the inactive result of a style function when not active', () => {
+    const defaultStyle = { color: 'black' };
+    const activeStyle = { color: 'red' };
+
+    render(
+      <MemoryRouter initialEntries={['/pizza']}>
+        <NavLink
+          to="/salad"
+          style={(isActive) => (isActive ? activeStyle : defaultStyle)}
+        >
+          Salad?
+        </NavLink>
+      </MemoryRouter>,
+      node,
+    );
+
+    const a = node.querySelector('a');
+    expect(a.style.color).toBe(defaultStyle.color);
   });
 
   describe('exact', () => {
@@ -166,7 +247,7 @@ describe('NavLink', () => {
             Pizza!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).toEqual('active');
@@ -179,7 +260,7 @@ describe('NavLink', () => {
             Pizza!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).toEqual('active');
@@ -193,7 +274,7 @@ describe('NavLink', () => {
             Pizza!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).not.toContain('active');
@@ -207,7 +288,7 @@ describe('NavLink', () => {
             Pizza!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).not.toContain('active');
@@ -220,7 +301,7 @@ describe('NavLink', () => {
             Pizza!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).not.toContain('active');
@@ -235,7 +316,7 @@ describe('NavLink', () => {
         <MemoryRouter initialEntries={['/pizza']}>
           <NavLink to={PATH}>Pizza!</NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).toEqual('active');
@@ -248,7 +329,7 @@ describe('NavLink', () => {
             Pizza!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).not.toContain('active');
@@ -261,7 +342,7 @@ describe('NavLink', () => {
             Pizza!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).not.toContain('active');
@@ -275,7 +356,7 @@ describe('NavLink', () => {
             Pizza!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).toEqual('active');
@@ -288,7 +369,7 @@ describe('NavLink', () => {
             Pizza!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
 
@@ -301,11 +382,15 @@ describe('NavLink', () => {
     it('overrides the current location', () => {
       render(
         <MemoryRouter initialEntries={['/pizza']}>
-          <NavLink to="/pasta" activeClassName="selected" location={{ pathname: '/pasta' }}>
+          <NavLink
+            to="/pasta"
+            activeClassName="selected"
+            location={{ pathname: '/pasta' }}
+          >
             Pasta!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).not.toContain('active');
@@ -315,11 +400,15 @@ describe('NavLink', () => {
     it('is not overwritten by the current location', () => {
       render(
         <MemoryRouter initialEntries={['/pasta']}>
-          <NavLink to="/pasta" activeClassName="selected" location={{ pathname: '/pizza' }}>
+          <NavLink
+            to="/pasta"
+            activeClassName="selected"
+            location={{ pathname: '/pizza' }}
+          >
             Pasta!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.className).not.toContain('active');
@@ -336,10 +425,134 @@ describe('NavLink', () => {
             Pasta!
           </NavLink>
         </MemoryRouter>,
-        node
+        node,
       );
       const a = node.getElementsByTagName('a')[0];
       expect(a.title).toEqual('pasta');
+    });
+  });
+
+  describe('A <NavLink> underneath a <HashRouter> or <MemoryRouter>', () => {
+    let tmpNode;
+    beforeEach(function () {
+      tmpNode = document.createElement('div');
+      document.body.appendChild(tmpNode);
+    });
+
+    afterEach(function () {
+      render(null, tmpNode);
+      document.body.removeChild(tmpNode);
+    });
+
+    const createLinkNode = (to) => {
+      render(
+        <HashRouter>
+          <NavLink to={to} />
+        </HashRouter>,
+        tmpNode,
+      );
+
+      return tmpNode.querySelector('a');
+    };
+
+    it('has a # prefixed href in a <HashRouter> for a `to` path with a leading slash', () => {
+      const linkNode = createLinkNode('/foo');
+      expect(linkNode.getAttribute('href')).toEqual('#/foo');
+    });
+
+    it('has a # prefixed href in a <HashRouter> for a `to` path without a leading slash', () => {
+      const linkNode = createLinkNode('foo');
+      expect(linkNode.getAttribute('href')).toEqual('#foo');
+    });
+
+    it('accepts a string `to` prop', () => {
+      const to = '/the/path?the=query#the-hash';
+
+      render(
+        <MemoryRouter>
+          <NavLink to={to}>link</NavLink>
+        </MemoryRouter>,
+        tmpNode,
+      );
+
+      const a = tmpNode.querySelector('a');
+
+      expect(a.getAttribute('href')).toEqual('/the/path?the=query#the-hash');
+    });
+
+    it('accepts an object `to` prop', () => {
+      const to = {
+        hash: '#the-hash',
+        key: '1',
+        pathname: '/the/path',
+        search: 'the=query',
+        state: null,
+      };
+
+      render(
+        <MemoryRouter>
+          <NavLink to={to}>link</NavLink>
+        </MemoryRouter>,
+        tmpNode,
+      );
+
+      const a = tmpNode.querySelector('a');
+
+      expect(a.getAttribute('href')).toEqual('/the/path?the=query#the-hash');
+    });
+
+    it('accepts an object `to` prop with state', async () => {
+      const memoryHistoryFoo = createMemoryHistory({
+        initialEntries: ['/foo'],
+      });
+      memoryHistoryFoo.push = jasmine.createSpy();
+
+      const clickHandler = jasmine.createSpy();
+
+      const to = {
+        hash: '#the-hash',
+        key: '1',
+        pathname: '/the/path',
+        search: 'the=query',
+        state: { test: 'ok' },
+      };
+
+      class ContextChecker extends Component<{ children?: InfernoNode }> {
+        public getChildContext() {
+          const { context } = this;
+          context.router.history = memoryHistoryFoo;
+
+          return {
+            router: context.router,
+          };
+        }
+
+        public render({ children }) {
+          return children;
+        }
+      }
+
+      render(
+        <MemoryRouter>
+          <ContextChecker>
+            <NavLink to={to} onClick={clickHandler}>
+              link
+            </NavLink>
+          </ContextChecker>
+        </MemoryRouter>,
+        tmpNode,
+      );
+
+      const a = tmpNode.querySelector('a');
+      a.click();
+
+      expect(clickHandler).toHaveBeenCalledTimes(1);
+      expect(memoryHistoryFoo.push).toHaveBeenCalledTimes(1);
+      const { hash, key, pathname, search, state } = to;
+      expect(memoryHistoryFoo.push).toHaveBeenCalledWith(
+        { hash, key, pathname, search },
+        state,
+      );
     });
   });
 });

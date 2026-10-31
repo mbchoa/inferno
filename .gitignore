@@ -7,7 +7,11 @@
 
 *.log
 
+package-lock.json
+**/package-lock.json
+
 build
+dist
 coverage
 node_modules
 fixtures/browser/*.cmd
@@ -19,4 +23,4 @@ packages/*/package-lock.json
 .rpt2_cache_development
 .rpt2_cache_production
 
-scripts/fakedom/*
+.swc

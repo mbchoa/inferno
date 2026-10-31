@@ -1,3 +1,4 @@
+import { isFunction } from 'inferno-shared';
 import { verifyPlainObject } from '../utils/verifyPlainObject';
 
 // TODO: Type
@@ -5,7 +6,7 @@ export const wrapMapToPropsConstant = (getConstant) => {
   return (dispatch, options) => {
     const constant = getConstant(dispatch, options);
 
-    const constantSelector = () => constant;
+    const constantSelector = (): unknown => constant;
     (constantSelector as any).dependsOnOwnProps = false;
     return constantSelector;
   };
@@ -18,8 +19,11 @@ export const wrapMapToPropsConstant = (getConstant) => {
 // A length of one signals that mapToProps does not depend on props from the parent component.
 // A length of zero is assumed to mean mapToProps is getting args via arguments or ...args and
 // therefore not reporting its length accurately..
-export const getDependsOnOwnProps = (mapToProps) =>
-  mapToProps.dependsOnOwnProps !== null && mapToProps.dependsOnOwnProps !== undefined ? !!mapToProps.dependsOnOwnProps : mapToProps.length !== 1;
+export const getDependsOnOwnProps = (mapToProps): boolean =>
+  mapToProps.dependsOnOwnProps !== null &&
+  mapToProps.dependsOnOwnProps !== undefined
+    ? !!mapToProps.dependsOnOwnProps
+    : mapToProps.length !== 1;
 
 // Used by whenMapStateToPropsIsFunction and whenMapDispatchToPropsIsFunction,
 // this function wraps mapToProps in a proxy function which does several things:
@@ -36,7 +40,9 @@ export const getDependsOnOwnProps = (mapToProps) =>
 export const wrapMapToPropsFunc = (mapToProps, methodName) => {
   return (_dispatch, { displayName }) => {
     const proxy: any = (stateOrDispatch, ownProps) =>
-      proxy.dependsOnOwnProps ? proxy.mapToProps(stateOrDispatch, ownProps) : proxy.mapToProps(stateOrDispatch);
+      proxy.dependsOnOwnProps
+        ? proxy.mapToProps(stateOrDispatch, ownProps)
+        : proxy.mapToProps(stateOrDispatch);
 
     proxy.dependsOnOwnProps = getDependsOnOwnProps(mapToProps);
 
@@ -44,7 +50,7 @@ export const wrapMapToPropsFunc = (mapToProps, methodName) => {
       proxy.mapToProps = mapToProps;
       let props = proxy(stateOrDispatch, ownProps);
 
-      if (typeof props === 'function') {
+      if (isFunction(props)) {
         proxy.mapToProps = props;
         proxy.dependsOnOwnProps = getDependsOnOwnProps(props);
         props = proxy(stateOrDispatch, ownProps);

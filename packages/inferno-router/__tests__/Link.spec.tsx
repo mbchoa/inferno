@@ -1,0 +1,269 @@
+import {Component, type InfernoNode, linkEvent, render} from 'inferno';
+import { HashRouter, Link, MemoryRouter, Router } from 'inferno-router';
+import { createMemoryHistory, parsePath } from 'history';
+
+describe('Link (jsx)', () => {
+  let node;
+  beforeEach(function () {
+    node = document.createElement('div');
+    document.body.appendChild(node);
+  });
+
+  afterEach(function () {
+    render(null, node);
+    document.body.removeChild(node);
+  });
+
+  it('accepts a location `to` prop', () => {
+    render(
+      <MemoryRouter>
+        <Link to={parsePath('/the/path?the=query#the-hash')}>link</Link>
+      </MemoryRouter>,
+      node,
+    );
+
+    const href = node.querySelector('a').getAttribute('href');
+
+    expect(href).toEqual('/the/path?the=query#the-hash');
+  });
+
+  it('throws with no <Router>', () => {
+    expect(() => {
+      render(<Link to="/">link</Link>, node);
+    }).toThrow(new Error('You should not use <Link> outside a <Router>'));
+  });
+
+  it('navigates in the router when its target is _self', () => {
+    const history = createMemoryHistory();
+
+    render(
+      <Router history={history}>
+        <Link to="/self" target="_self">
+          link
+        </Link>
+      </Router>,
+      node,
+    );
+
+    let preventedByLink = false;
+    // Runs after the delegated handler of Link, and keeps the browser from leaving the test page
+    const guard = (event: MouseEvent) => {
+      preventedByLink = event.defaultPrevented;
+      event.preventDefault();
+    };
+    document.addEventListener('click', guard);
+
+    node
+      .querySelector('a')
+      .dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    document.removeEventListener('click', guard);
+
+    expect(preventedByLink).toBe(true);
+    expect(history.location.pathname).toBe('/self');
+  });
+
+  it('exposes its ref via an innerRef prop', (done) => {
+    const testNode = document.createElement('div');
+    const refCallback = (n) => {
+      expect(n.tagName).toEqual('A');
+      done();
+    };
+
+    render(
+      <MemoryRouter>
+        <Link to="/" innerRef={refCallback}>
+          link
+        </Link>
+      </MemoryRouter>,
+      testNode,
+    );
+
+    expect(testNode.textContent).toEqual('link');
+  });
+});
+
+describe('A <Link> underneath a <HashRouter> or <MemoryRouter>', () => {
+  let node;
+  beforeEach(function () {
+    node = document.createElement('div');
+    document.body.appendChild(node);
+  });
+
+  afterEach(function () {
+    render(null, node);
+    document.body.removeChild(node);
+  });
+
+  const createLinkNode = (to) => {
+    render(
+      <HashRouter>
+        <Link to={to} />
+      </HashRouter>,
+      node,
+    );
+
+    return node.querySelector('a');
+  };
+
+  it('has a # prefixed href in a <HashRouter> for a `to` path with a leading slash', () => {
+    const linkNode = createLinkNode('/foo');
+    expect(linkNode.getAttribute('href')).toEqual('#/foo');
+  });
+
+  it('has a # prefixed href in a <HashRouter> for a `to` path without a leading slash', () => {
+    const linkNode = createLinkNode('foo');
+    expect(linkNode.getAttribute('href')).toEqual('#foo');
+  });
+
+  it('accepts a string `to` prop', () => {
+    const to = '/the/path?the=query#the-hash';
+
+    render(
+      <MemoryRouter>
+        <Link to={to}>link</Link>
+      </MemoryRouter>,
+      node,
+    );
+
+    const a = node.querySelector('a');
+
+    expect(a.getAttribute('href')).toEqual('/the/path?the=query#the-hash');
+  });
+
+  it('accepts an object `to` prop', () => {
+    const to = {
+      hash: '#the-hash',
+      pathname: '/the/path',
+      search: 'the=query',
+    };
+
+    render(
+      <MemoryRouter>
+        <Link to={to}>link</Link>
+      </MemoryRouter>,
+      node,
+    );
+
+    const a = node.querySelector('a');
+
+    expect(a.getAttribute('href')).toEqual('/the/path?the=query#the-hash');
+  });
+
+  it('accepts an object `to` prop with state and calls a linkEvent onClick with its data', () => {
+    const memoryHistoryFoo = createMemoryHistory({
+      initialEntries: ['/foo'],
+    });
+    memoryHistoryFoo.push = jasmine.createSpy();
+
+    // clickHandler is the linkEvent handler
+    let called = false;
+    const clickHandler = linkEvent({a: 1}, (data, event) => {
+      expect(data).toBeDefined();
+      expect(data.a).toEqual(1);
+      expect(event).toBeDefined();
+      expect((event as any).type).toEqual('click');
+      called = true;
+    });
+
+    const to = {
+      hash: '#the-hash2',
+      key: '2',
+      pathname: '/the/path2',
+      search: 'the=query2',
+      state: { test: 'ok2' },
+    };
+
+    class ContextChecker extends Component<{ children?: InfernoNode }> {
+      public getChildContext() {
+        const { context } = this;
+        context.router.history = memoryHistoryFoo;
+
+        return {
+          router: context.router,
+        };
+      }
+
+      public render({ children }) {
+        return children;
+      }
+    }
+
+    render(
+      <MemoryRouter>
+        <ContextChecker>
+          <Link to={to} onClick={clickHandler}>
+            link
+          </Link>
+        </ContextChecker>
+      </MemoryRouter>,
+      node,
+    );
+
+    const a = node.querySelector('a');
+    a.click();
+
+    expect(called).toBeTruthy();
+    expect(memoryHistoryFoo.push).toHaveBeenCalledTimes(1);
+    const { hash, key, pathname, search, state } = to;
+    expect(memoryHistoryFoo.push).toHaveBeenCalledWith(
+      { hash, key, pathname, search },
+      state,
+    );
+  });
+
+  it('accepts an object `to` prop with state and calls a function onClick', () => {
+    const memoryHistoryFoo = createMemoryHistory({
+      initialEntries: ['/foo'],
+    });
+    memoryHistoryFoo.push = jasmine.createSpy();
+
+    const clickHandler = jasmine.createSpy();
+
+    const to = {
+      hash: '#the-hash',
+      key: '1',
+      pathname: '/the/path',
+      search: 'the=query',
+      state: { test: 'ok' },
+    };
+
+    class ContextChecker extends Component<{ children?: InfernoNode }> {
+      public getChildContext() {
+        const { context } = this;
+        context.router.history = memoryHistoryFoo;
+
+        return {
+          router: context.router,
+        };
+      }
+
+      public render({ children }) {
+        return children;
+      }
+    }
+
+    render(
+      <MemoryRouter>
+        <ContextChecker>
+          <Link to={to} onClick={clickHandler}>
+            link
+          </Link>
+        </ContextChecker>
+      </MemoryRouter>,
+      node,
+    );
+
+    const a = node.querySelector('a');
+    a.click();
+
+    expect(clickHandler).toHaveBeenCalledTimes(1);
+    expect(memoryHistoryFoo.push).toHaveBeenCalledTimes(1);
+    const { hash, key, pathname, search, state } = to;
+    expect(memoryHistoryFoo.push).toHaveBeenCalledWith(
+      { hash, key, pathname, search },
+      state,
+    );
+  });
+});

@@ -1,54 +1,92 @@
-import { createComponentVNode, createFragment, createVNode, getFlagsForElementVnode, IComponentConstructor, Inferno, Key, Props, VNode } from 'inferno';
-import { isInvalid, isNullOrUndef, isString, isUndefined } from 'inferno-shared';
-import { ChildFlags, VNodeFlags } from 'inferno-vnode-flags';
-import StatelessComponent = Inferno.StatelessComponent;
+import {
+  type Component,
+  getFlagsForElementVnode,
+  type Inferno,
+  type InfernoNode,
+  type Key,
+  newComponentVNode,
+  newFragment,
+  newVNode,
+  type Ref,
+  type RefObject,
+  type Refs,
+  type VNode,
+} from 'inferno';
+import {
+  isInvalid,
+  isNullOrUndef,
+  isString,
+  isUndefined,
+} from 'inferno-shared';
+import { VNodeFlags } from 'inferno-vnode-flags';
 
-const componentHooks = {
-  onComponentDidAppear: 1,
-  onComponentDidMount: 1,
-  onComponentDidUpdate: 1,
-  onComponentShouldUpdate: 1,
-  onComponentWillDisappear: 1,
-  onComponentWillMount: 1,
-  onComponentWillUnmount: 1,
-  onComponentWillUpdate: 1
-};
+// The props that createElement handles itself, the ref receives T
+export interface CreateElementProps<T> {
+  children?: InfernoNode;
+  key?: Key;
+  ref?: Ref<T> | RefObject<T> | null;
+}
 
-/**
- * Creates virtual node
- * @param {string|Function|Component<any, any>} type Type of node
- * @param {object=} props Optional props for virtual node
- * @param {...{object}=} _children Optional children for virtual node
- * @returns {VNode} new virtual node
- */
-export function createElement<P>(type: string | IComponentConstructor<P> | StatelessComponent<P>, props?: (P & Props<P>) | null, ..._children: any[]): VNode;
-export function createElement<P>(type: string | IComponentConstructor<P> | StatelessComponent<P>, props?: (P & Props<P>) | null, _children?: any): VNode {
+// Function components can also take their lifecycle hooks as props, see Refs
+export interface CreateFunctionElementProps<P>
+  extends Omit<CreateElementProps<unknown>, 'ref'>, Refs<P> {
+  ref?: Ref<unknown> | RefObject<unknown> | Refs<P> | null;
+}
+
+// DOM elements, the ref receives the element
+export function createElement<P, T extends Element = Element>(
+  type: string,
+  props?: (P & CreateElementProps<T>) | null,
+  ...children: any[]
+): VNode;
+// Function components and forwardRef components
+export function createElement<P>(
+  type: Inferno.StatelessComponent<P & Refs<P>>,
+  props?: (P & CreateFunctionElementProps<P>) | null,
+  ...children: any[]
+): VNode;
+// Class components, the ref receives the component instance
+export function createElement<P>(
+  type: Inferno.ComponentClass<P> | typeof Component<P, any>,
+  props?: (P & CreateElementProps<unknown>) | null,
+  ...children: any[]
+): VNode;
+export function createElement<P>(
+  type:
+    | string
+    | Inferno.ComponentClass<P>
+    | Inferno.StatelessComponent<P & Refs<P>>
+    | typeof Component<P, any>,
+  props?: (P & CreateElementProps<unknown> & Refs<P>) | null,
+  ...children: any[]
+): VNode {
   if (process.env.NODE_ENV !== 'production') {
     if (isInvalid(type)) {
       throw new Error(
-        'Inferno Error: createElement() name parameter cannot be undefined, null, false or true, It must be a string, class, function or forwardRef.'
+        'Inferno Error: createElement() name parameter cannot be undefined, null, false or true, It must be a string, class, function or forwardRef.',
       );
     }
   }
-  let children: any;
+  let definedChildren: any;
   let ref: any = null;
   let key: Key = null;
   let className: string | null = null;
-  let flags: VNodeFlags = 0;
-  let newProps;
-  let childLen = arguments.length - 2;
+  let flags: VNodeFlags;
+  let newProps: Readonly<unknown> | null | undefined;
+  const childLen = children.length;
 
   if (childLen === 1) {
-    children = _children;
+    definedChildren = children[0];
   } else if (childLen > 1) {
-    children = [];
+    definedChildren = [];
 
-    while (childLen-- > 0) {
-      children[childLen] = arguments[childLen + 2];
+    for (let i = 0, len = children.length; i < len; ++i) {
+      const child = children[i];
+      definedChildren.push(child);
     }
   }
   if (isString(type)) {
-    flags = getFlagsForElementVnode(type as string);
+    flags = getFlagsForElementVnode(type);
 
     if (!isNullOrUndef(props)) {
       newProps = {};
@@ -58,8 +96,8 @@ export function createElement<P>(type: string | IComponentConstructor<P> | State
           className = (props as any)[prop];
         } else if (prop === 'key') {
           key = props.key;
-        } else if (prop === 'children' && isUndefined(children)) {
-          children = props.children; // always favour children args over props
+        } else if (prop === 'children' && isUndefined(definedChildren)) {
+          definedChildren = props.children; // always favour children args over props
         } else if (prop === 'ref') {
           ref = props.ref;
         } else {
@@ -72,38 +110,53 @@ export function createElement<P>(type: string | IComponentConstructor<P> | State
     }
   } else {
     flags = VNodeFlags.ComponentUnknown;
-    if (!isUndefined(children)) {
-      if (!props) {
-        props = {} as P;
-      }
-      props.children = children;
-    }
 
-    if (!isNullOrUndef(props)) {
-      newProps = {} as P & Props<P>;
+    if (!isNullOrUndef(props) || !isUndefined(definedChildren)) {
+      newProps = {};
 
       for (const prop in props) {
         if (prop === 'key') {
           key = props.key;
         } else if (prop === 'ref') {
           ref = props.ref;
-        } else if ((componentHooks as any)[prop] === 1) {
-          if (!ref) {
-            ref = {};
-          }
-          ref[prop] = props[prop];
         } else {
-          newProps[prop] = props[prop];
+          switch (prop) {
+            case 'onComponentDidAppear':
+            case 'onComponentDidMount':
+            case 'onComponentDidUpdate':
+            case 'onComponentShouldUpdate':
+            case 'onComponentWillDisappear':
+            case 'onComponentWillMount':
+            case 'onComponentWillMove':
+            case 'onComponentWillUnmount':
+            case 'onComponentWillUpdate':
+              if (!ref) {
+                ref = {};
+              }
+              ref[prop] = props[prop];
+              break;
+            default:
+              newProps[prop] = props[prop];
+              break;
+          }
         }
+      }
+      if (!isUndefined(definedChildren)) {
+        (newProps as Record<string, unknown>).children = definedChildren;
       }
     }
 
-    return createComponentVNode(flags, type as Function, newProps, key, ref);
+    return newComponentVNode(flags, type, newProps, key, ref);
   }
 
+  // The flags have no child bit, the children are normalized
   if (flags & VNodeFlags.Fragment) {
-    return createFragment(childLen === 1 ? [children] : children, ChildFlags.UnknownChildren, key);
+    return newFragment(
+      VNodeFlags.Fragment,
+      childLen === 1 ? [definedChildren] : definedChildren,
+      key,
+    );
   }
 
-  return createVNode(flags, type as string, className, children, ChildFlags.UnknownChildren, newProps, key, ref);
+  return newVNode(flags, type, className, definedChildren, newProps, key, ref);
 }

@@ -1,10 +1,23 @@
-import pathToRegexp from 'path-to-regexp-es6';
+import pathToRegexp from 'path-to-regexp';
+import { isString } from 'inferno-shared';
+import { type Match } from './Route';
 
 const patternCache = {};
 const cacheLimit = 10000;
 let cacheCount = 0;
 
-const compilePath = (pattern, options) => {
+interface pathToRegexKey {
+  name: string | number;
+  prefix: string;
+  delimiter: string;
+  optional: boolean;
+  repeat: boolean;
+  pattern: string;
+  partial: boolean;
+  asterisk: boolean;
+}
+
+const compilePath = (pattern, options): { re: any; keys: pathToRegexKey[] } => {
   const cacheKey = `${options.end}${options.strict}${options.sensitive}`;
   const cache = patternCache[cacheKey] || (patternCache[cacheKey] = {});
 
@@ -27,18 +40,27 @@ const compilePath = (pattern, options) => {
 /**
  * Public API for matching a URL pathname to a path pattern.
  */
-export function matchPath(pathname, options: any) {
-  if (typeof options === 'string') {
+export function matchPath(pathname, options: any): Match<any> | null {
+  if (isString(options)) {
     options = { path: options };
   }
 
-  const { path = '/', exact = false, strict = false, sensitive = false } = options;
+  const {
+    path = '/',
+    exact = false,
+    strict = false,
+    sensitive = false,
+    loader,
+    initialData = {},
+  } = options;
   const { re, keys } = compilePath(path, { end: exact, strict, sensitive });
   const match = re.exec(pathname);
 
   if (!match) {
     return null;
   }
+
+  const loaderData = initialData[path];
 
   const [url, ...values] = match;
   const isExact = pathname === url;
@@ -48,12 +70,23 @@ export function matchPath(pathname, options: any) {
   }
 
   return {
-    isExact, // whether or not we matched exactly
+    isExact,
+    loader,
+    loaderData,
     params: keys.reduce((memo, key, index) => {
       memo[key.name] = values[index];
       return memo;
     }, {}),
     path, // the path pattern used to match
-    url: path === '/' && url === '' ? '/' : url // the matched portion of the URL
+    url: path === '/' && url === '' ? '/' : url, // the matched portion of the URL
   };
+}
+
+/**
+ * Fills the params of a path pattern, for example '/new/:id' with { id: 7 } gives '/new/7'.
+ */
+export function generatePath(pattern: string, params = {}): string {
+  return pattern === '/'
+    ? pattern
+    : pathToRegexp.compile(pattern)(params, { pretty: true });
 }

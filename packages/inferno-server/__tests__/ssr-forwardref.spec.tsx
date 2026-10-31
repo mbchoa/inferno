@@ -1,8 +1,18 @@
-import { Component, createRef, forwardRef, RefObject, render } from 'inferno';
-import { renderToString, streamAsString, streamQueueAsString } from 'inferno-server';
+import {
+  Component,
+  createRef,
+  forwardRef,
+  type RefObject,
+  render,
+} from 'inferno';
+import {
+  renderToString,
+  streamAsString,
+  streamQueueAsString,
+} from 'inferno-server';
 import { hydrate } from 'inferno-hydrate';
 import { isString } from 'inferno-shared';
-import concatStream from 'concat-stream-es6';
+import concatStream from 'concat-stream';
 
 describe('SSR -> Hydrate - Forward Ref', () => {
   let container;
@@ -27,13 +37,15 @@ describe('SSR -> Hydrate - Forward Ref', () => {
       val.pipe(
         concatStream(function (buffer) {
           callback(buffer.toString('utf-8'));
-        })
+        }),
       );
     }
   }
 
-  [renderToString, streamAsString, streamQueueAsString].forEach(function (method) {
-    it('Should be possible to forward createRef', (done) => {
+  const methods = [renderToString, streamAsString, streamQueueAsString];
+  for (let i = 0, len = methods.length; i < len; ++i) {
+    const method = methods[i];
+    it(`Should be possible to forward createRef with ${method.name}`, (done) => {
       const FancyButton = forwardRef((props, ref) => (
         <button ref={ref} className="FancyButton">
           {props.children}
@@ -62,23 +74,29 @@ describe('SSR -> Hydrate - Forward Ref', () => {
       }
 
       SSRtoString(method, <Hello />, function (htmlString) {
-        expect(htmlString).toBe('<button class="FancyButton">Click me!</button>');
+        expect(htmlString).toBe(
+          '<button class="FancyButton">Click me!</button>',
+        );
 
         container.innerHTML = htmlString;
 
         renderToString(<Hello />);
 
-        expect(container.innerHTML).toBe('<button class="FancyButton">Click me!</button>');
+        expect(container.innerHTML).toBe(
+          '<button class="FancyButton">Click me!</button>',
+        );
 
         hydrate(<Hello />, container);
 
-        expect(container.innerHTML).toBe('<button class="FancyButton">Click me!</button>');
+        expect(container.innerHTML).toBe(
+          '<button class="FancyButton">Click me!</button>',
+        );
 
         done();
       });
     });
 
-    it('Should be possible to forward callback ref', (done) => {
+    it(`Should be possible to forward callback ref with ${method.name}`, (done) => {
       const FancyButton = forwardRef((props, ref) => (
         <button ref={ref} className="FancyButton">
           {props.children}
@@ -106,11 +124,15 @@ describe('SSR -> Hydrate - Forward Ref', () => {
       SSRtoString(method, <Hello />, function (htmlString) {
         container.innerHTML = htmlString;
 
-        expect(container.innerHTML).toBe('<button class="FancyButton">Click me!</button>');
+        expect(container.innerHTML).toBe(
+          '<button class="FancyButton">Click me!</button>',
+        );
 
         hydrate(<Hello />, container);
 
-        expect(container.innerHTML).toBe('<button class="FancyButton">Click me!</button>');
+        expect(container.innerHTML).toBe(
+          '<button class="FancyButton">Click me!</button>',
+        );
 
         render(null, container);
 
@@ -120,7 +142,7 @@ describe('SSR -> Hydrate - Forward Ref', () => {
       });
     });
 
-    it('Should be possible to patch forwardRef component', () => {
+    it(`Should be possible to patch forwardRef component with ${method.name}`, () => {
       const FancyButton = forwardRef((props, ref) => {
         return (
           <button ref={ref} className="FancyButton">
@@ -144,10 +166,12 @@ describe('SSR -> Hydrate - Forward Ref', () => {
           >
             Click me!
           </FancyButton>,
-          container
+          container,
         );
 
-        expect(container.innerHTML).toBe('<button class="FancyButton">Click me!</button>');
+        expect(container.innerHTML).toBe(
+          '<button class="FancyButton">Click me!</button>',
+        );
         expect(firstVal).not.toBe(null);
 
         let secondVal: Element | null = null;
@@ -160,14 +184,16 @@ describe('SSR -> Hydrate - Forward Ref', () => {
           >
             Click me! 222
           </FancyButton>,
-          container
+          container,
         );
 
         expect(firstVal).toBe(null);
         expect(secondVal).not.toBe(null);
 
-        expect(container.innerHTML).toBe('<button class="FancyButton">Click me! 222</button>');
+        expect(container.innerHTML).toBe(
+          '<button class="FancyButton">Click me! 222</button>',
+        );
       });
     });
-  });
+  }
 });

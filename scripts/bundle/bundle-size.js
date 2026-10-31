@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import { readFile, readdir } from 'fs/promises';
 import Table from 'cli-table';
 import { gzipSize } from 'gzip-size';
-import fileSize from 'filesize';
+import { filesize } from 'filesize';
 import { basename, dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -13,8 +13,8 @@ const INFERNO_VERSION = JSON.parse(readFileSync(join(__dirname, '../../package.j
 async function getFileSize(file) {
   const data = await readFile(file, 'utf-8');
   return {
-    fileSize: fileSize(Buffer.byteLength(data)),
-    gzipSize: fileSize(await gzipSize(data))
+    fileSize: filesize(Buffer.byteLength(data)),
+    gzipSize: filesize(await gzipSize(data))
   };
 }
 
@@ -30,18 +30,21 @@ async function printFileSizes() {
       `INFERNO - ${INFERNO_VERSION}`,
       'Browser' + ' (gzip)',
       'Browser prod (min)' + ' (gzip)',
-      '(es2015)' + ' (gzip)',
+      'mjs' + ' (gzip)',
       'cjs' + ' (gzip)',
       'cjs prod' + ' (gzip)'
     ],
     colWidth: [100, 200, 200, 200, 200]
   });
 
-  for (const name of packages.sort()) {
-    const filesToStat = [name + '.js', name + '.min.js', 'index.esm.js', 'index.cjs.js', 'index.cjs.min.js'];
+  const names = packages.sort();
+  for (let i = 0, len = names.length; i < len; ++i) {
+    const name = names[i];
+    const filesToStat = [name + '.js', name + '.min.js', 'index.mjs', 'index.cjs', 'index.min.cjs'];
     const row = [name];
 
-    for (const file of filesToStat) {
+    for (let j = 0, len2 = filesToStat.length; j < len2; ++j) {
+      const file = filesToStat[j];
       const sizes = await getFileSize(`${PACKAGES_DIR}/${name}/dist/${file}`);
 
       row.push(`${sizes.fileSize}/${sizes.gzipSize}`);

@@ -1,5 +1,5 @@
 import {
-  __render,
+  renderInternal,
   _CI,
   _HI,
   _M,
@@ -9,6 +9,7 @@ import {
   _MP,
   _MR,
   Component,
+  type ComponentType,
   createComponentVNode,
   createFragment,
   createPortal,
@@ -22,27 +23,39 @@ import {
   forwardRef,
   Fragment,
   getFlagsForElementVnode,
-  Inferno,
+  type InfernoNode,
   linkEvent,
+  type MouseEventHandler,
+  newComponentVNode,
+  newFragment,
+  newTextVNode,
+  newVNode,
   normalizeProps,
   options,
   rerender,
-  VNode
+  type VNode,
 } from 'inferno';
 import { hydrate } from 'inferno-hydrate';
 import { cloneVNode } from 'inferno-clone-vnode';
-import { createClass } from 'inferno-create-class';
-import { createElement } from 'inferno-create-element';
-import { isArray, isFunction, isInvalid, isNull, isNullOrUndef, isNumber, isString, warning } from 'inferno-shared';
+import { createElement, type CreateElementProps } from 'inferno-create-element';
+import {
+  isArray,
+  isFunction,
+  isInvalid,
+  isNull,
+  isNullOrUndef,
+  isNumber,
+  isString,
+  warning,
+} from 'inferno-shared';
 import { VNodeFlags } from 'inferno-vnode-flags';
-import { isValidElement } from './isValidElement';
+import { isValidElement } from 'inferno-shared';
 import PropTypes from './PropTypes';
 import { InfernoCompatPropertyMap } from './InfernoCompatPropertyMap';
 import { findDOMNode } from 'inferno-extras';
 import { getNumberStyleValue, hyphenCase } from './reactstyles';
 
 export type { ComponentType, Inferno, Refs, VNode } from 'inferno';
-export type { ClassicComponentClass, ComponentSpec } from 'inferno-create-class';
 
 declare global {
   interface Event {
@@ -50,16 +63,37 @@ declare global {
   }
 }
 
+// React props that inferno-compat maps to Inferno ones (see normalizeGenericProps)
+declare module 'inferno' {
+  // Augmenting the Inferno namespace needs namespace syntax
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Inferno {
+    interface StyleObjectTypes {
+      camelCase: CamelCaseStyleObject;
+    }
+
+    interface DOMAttributes<T> {
+      onDoubleClick?: MouseEventHandler<T> | undefined;
+    }
+  }
+}
+
 options.reactStyles = true;
 
-function unmountComponentAtNode(container: Element | SVGAElement | DocumentFragment): boolean {
-  __render(null, container, null, null);
+function unmountComponentAtNode(
+  container: Element | SVGAElement | DocumentFragment,
+): boolean {
+  renderInternal(null, container, null, {});
   return true;
 }
 
-export type IterateChildrenFn = (value: Inferno.InfernoNode | any, index: number, array: any[]) => any;
+export type IterateChildrenFn = (
+  value: InfernoNode | any,
+  index: number,
+  array: any[],
+) => any;
 
-function flatten(arr, result) {
+function flatten(arr, result): unknown[] {
   for (let i = 0, len = arr.length; i < len; ++i) {
     const value = arr[i];
     if (isArray(value)) {
@@ -71,45 +105,49 @@ function flatten(arr, result) {
   return result;
 }
 
-const ARR = [];
+const ARR: InfernoNode[] = [];
 
+// Like React, the functions take a single child, an array of children, null or undefined
 const Children = {
-  map(children: any[], fn: IterateChildrenFn, ctx: any): any[] {
+  map(
+    children: InfernoNode,
+    fn: IterateChildrenFn,
+    ctx?: unknown,
+  ): any[] | null | undefined {
     if (isNullOrUndef(children)) {
       return children;
     }
-    children = Children.toArray(children);
+    const array = Children.toArray(children);
     if (ctx) {
       fn = fn.bind(ctx);
     }
-    return children.map(fn);
+    return array.map(fn);
   },
-  forEach(children: any[], fn: IterateChildrenFn, ctx?: any): void {
+  forEach(children: InfernoNode, fn: IterateChildrenFn, ctx?: unknown): void {
     if (isNullOrUndef(children)) {
       return;
     }
-    children = Children.toArray(children);
+    const array = Children.toArray(children);
     if (ctx) {
       fn = fn.bind(ctx);
     }
-    for (let i = 0, len = children.length; i < len; ++i) {
-      const child = isInvalid(children[i]) ? null : children[i];
+    for (let i = 0, len = array.length; i < len; ++i) {
+      const child = isInvalid(array[i]) ? null : array[i];
 
-      fn(child, i, children);
+      fn(child, i, array);
     }
   },
-  count(children: any[]): number {
-    children = Children.toArray(children);
-    return children.length;
+  count(children: InfernoNode): number {
+    return Children.toArray(children).length;
   },
-  only(children: any[]): Inferno.InfernoNode | any {
-    children = Children.toArray(children);
-    if (children.length !== 1) {
+  only(children: InfernoNode): InfernoNode | any {
+    const array = Children.toArray(children);
+    if (array.length !== 1) {
       throw new Error('Children.only() expects only one child.');
     }
-    return children[0];
+    return array[0];
   },
-  toArray(children: any[]): any[] {
+  toArray(children: InfernoNode): any[] {
     if (isNullOrUndef(children)) {
       return [];
     }
@@ -123,7 +161,7 @@ const Children = {
       return result;
     }
     return ARR.concat(children);
-  }
+  },
 };
 
 (Component.prototype as any).isReactComponent = {};
@@ -142,10 +180,10 @@ const validLineInputs = {
   text: true,
   time: true,
   url: true,
-  week: true
+  week: true,
 };
 
-function normalizeGenericProps(props) {
+function normalizeGenericProps(props): void {
   for (const prop in props) {
     const mappedProp = InfernoCompatPropertyMap[prop];
     if (mappedProp && props[prop] && mappedProp !== prop) {
@@ -162,7 +200,9 @@ function normalizeGenericProps(props) {
           const value = styles[s];
           const hyphenStr = hyphenCase(s);
 
-          newStyles[hyphenStr] = isNumber(value) ? getNumberStyleValue(hyphenStr, value) : value;
+          newStyles[hyphenStr] = isNumber(value)
+            ? getNumberStyleValue(hyphenStr, value)
+            : value;
         }
         props.style = newStyles;
       }
@@ -170,9 +210,13 @@ function normalizeGenericProps(props) {
   }
 }
 
-function normalizeFormProps(name: string, props: any) {
-  if ((name === 'input' || name === 'textarea') && props.type !== 'radio' && props.onChange) {
-    const type = props.type && props.type.toLowerCase();
+function normalizeFormProps(name: string, props: any): void {
+  if (
+    (name === 'input' || name === 'textarea') &&
+    props.type !== 'radio' &&
+    props.onChange
+  ) {
+    const type = props.type?.toLowerCase();
     let eventName;
 
     if (!type || validLineInputs[type]) {
@@ -186,7 +230,7 @@ function normalizeFormProps(name: string, props: any) {
         if (existingMethod) {
           warning(
             `Inferno-compat Warning! 'onInput' handler is reserved to support React like 'onChange' event flow.
-Original event handler 'function ${existingMethod.name}' will not be called.`
+Original event handler 'function ${existingMethod.name}' will not be called.`,
           );
         }
       }
@@ -197,7 +241,7 @@ Original event handler 'function ${existingMethod.name}' will not be called.`
 }
 
 // we need to add persist() to Event (as React has it for synthetic events)
-// this is a hack and we really shouldn't be modifying a global object this way,
+// this is a hack, and we really shouldn't be modifying a global object this way,
 // but there isn't a performant way of doing this apart from trying to proxy
 // every prop event that starts with "on", i.e. onClick or onKeyPress
 // but in reality devs use onSomething for many things, not only for
@@ -206,18 +250,15 @@ if (typeof Event !== 'undefined') {
   const eventProtoType = Event.prototype as any;
 
   if (!eventProtoType.persist) {
-    // tslint:disable-next-line:no-empty
     eventProtoType.persist = function () {};
   }
 }
 
-function iterableToArray(iterable) {
-  let iterStep;
+function iterableToArray(iterable): unknown[] {
   const tmpArr: any[] = [];
-  do {
-    iterStep = iterable.next();
-    tmpArr.push(iterStep.value);
-  } while (!iterStep.done);
+  for (const value of iterable) {
+    tmpArr.push(value);
+  }
 
   return tmpArr;
 }
@@ -236,8 +277,14 @@ options.createVNode = (vNode: VNode) => {
   }
 
   // React supports iterable children, in addition to Array-like
-  if (hasSymbolSupport && !isNull(children) && typeof children === 'object' && !isArray(children) && isFunction(children[symbolIterator])) {
-    vNode.children = iterableToArray(children[symbolIterator]());
+  if (
+    hasSymbolSupport &&
+    !isNull(children) &&
+    typeof children === 'object' &&
+    !isArray(children) &&
+    isFunction(children[symbolIterator])
+  ) {
+    vNode.children = iterableToArray(children);
   }
 
   if (!isNullOrUndef(children) && isNullOrUndef(props.children)) {
@@ -245,10 +292,21 @@ options.createVNode = (vNode: VNode) => {
   }
   if (vNode.flags & VNodeFlags.Component) {
     if (isString(vNode.type)) {
-      vNode.flags = getFlagsForElementVnode(vNode.type as string);
-      if (props) {
-        normalizeProps(vNode);
+      const elementFlags = getFlagsForElementVnode(vNode.type);
+
+      if (elementFlags === VNodeFlags.Fragment) {
+        // A variable tag that holds Fragment: the children are in props, and they get the shape
+        // newFragment gives them, which mounting relies on
+        const fragment = newFragment(VNodeFlags.Fragment, props.children, null);
+
+        vNode.type = fragment.type;
+        vNode.children = fragment.children;
+        vNode.flags = fragment.flags;
+      } else {
+        // The children shape bits are kept, normalizeProps changes them when props have children
+        vNode.flags = elementFlags | (vNode.flags & VNodeFlags.ChildFlagsMask);
       }
+      normalizeProps(vNode);
     }
   }
 
@@ -271,6 +329,13 @@ options.createVNode = (vNode: VNode) => {
 
 // Credit: preact-compat - https://github.com/developit/preact-compat :)
 function shallowDiffers(a, b): boolean {
+  if (a === b) {
+    return false;
+  }
+  // A component without initial state has null state
+  if (a === null || b === null) {
+    return true;
+  }
   let i;
 
   for (i in a) {
@@ -287,34 +352,44 @@ function shallowDiffers(a, b): boolean {
   return false;
 }
 
-class PureComponent<P, S> extends Component<P, S> {
-  public shouldComponentUpdate(props, state) {
-    return shallowDiffers(this.props, props) || shallowDiffers(this.state, state);
+abstract class PureComponent<
+  P = Record<string, unknown>,
+  S = Record<string, unknown>,
+> extends Component<P, S> {
+  public shouldComponentUpdate(props, state): boolean {
+    return (
+      shallowDiffers(this.props, props) || shallowDiffers(this.state, state)
+    );
   }
 }
 
 interface ContextProps {
+  children?: InfernoNode;
   context: any;
 }
 
-type WrapperComponentProps<P> = P & ContextProps;
-
-class WrapperComponent<P, S> extends Component<WrapperComponentProps<P>, S> {
-  public getChildContext() {
-    // tslint:disable-next-line
+class WrapperComponent<P, S> extends Component<P & ContextProps, S> {
+  public getChildContext(): (P & ContextProps)['context'] {
     return this.props.context;
   }
 
-  public render(props) {
+  public render(props): InfernoNode {
     return props.children;
   }
 }
 
-function unstable_renderSubtreeIntoContainer(parentComponent, vNode, container, callback) {
-  const wrapperVNode: VNode = createComponentVNode(VNodeFlags.ComponentClass, WrapperComponent, {
-    children: vNode,
-    context: parentComponent.context
-  });
+// T is the class component that vNode renders
+function unstable_renderSubtreeIntoContainer<
+  T extends JSX.ElementClass = Component,
+>(parentComponent, vNode, container, callback?: (this: T) => void): T {
+  const wrapperVNode: VNode = newComponentVNode(
+    VNodeFlags.ComponentClass | VNodeFlags.HasInvalidChildren,
+    WrapperComponent,
+    {
+      children: vNode,
+      context: parentComponent.context,
+    },
+  );
   render(wrapperVNode, container, null);
   const component = vNode.children;
 
@@ -325,22 +400,43 @@ function unstable_renderSubtreeIntoContainer(parentComponent, vNode, container, 
   return component;
 }
 
+// A createElement() with the type bound, the ref receives T
+type ElementFactory<P, T> = (
+  props?: (P & CreateElementProps<T>) | null,
+  ...children: InfernoNode[]
+) => VNode;
+
+function createFactory<T extends Element = Element>(
+  type: string,
+): ElementFactory<Record<string, unknown>, T>;
+function createFactory<P>(type: ComponentType<P>): ElementFactory<P, unknown>;
 function createFactory(type) {
   return createElement.bind(null, type);
 }
 
-function render(rootInput, container, cb = null, context = EMPTY_OBJ) {
-  __render(rootInput, container, cb, context);
+// Returns the root component instance, T is its class
+function render<T extends JSX.ElementClass = Component>(
+  rootInput,
+  container,
+  cb: (() => void) | null = null,
+  context = EMPTY_OBJ,
+): T | undefined {
+  renderInternal(rootInput, container, cb, context);
 
   const input = container.$V;
 
   if (input && input.flags & VNodeFlags.Component) {
     return input.children;
   }
+
+  return void 0;
 }
 
 // Mask React global in browser enviornments when React is not used.
-if (typeof window !== 'undefined' && typeof (window as any).React === 'undefined') {
+if (
+  typeof window !== 'undefined' &&
+  typeof (window as any).React === 'undefined'
+) {
   const exports = {
     Children,
     Component,
@@ -357,11 +453,10 @@ if (typeof window !== 'undefined' && typeof (window as any).React === 'undefined
     _MFCC,
     _MP,
     _MR,
-    __render,
+    __render: renderInternal,
     // Public methods
     cloneElement: cloneVNode,
     cloneVNode,
-    createClass,
     createComponentVNode,
     createElement,
     createFactory,
@@ -379,13 +474,17 @@ if (typeof window !== 'undefined' && typeof (window as any).React === 'undefined
     hydrate,
     isValidElement,
     linkEvent,
+    newComponentVNode,
+    newFragment,
+    newTextVNode,
+    newVNode,
     normalizeProps,
     options,
     render,
     rerender,
     unmountComponentAtNode,
     unstable_renderSubtreeIntoContainer,
-    version
+    version,
   };
 
   (window as any).React = exports;
@@ -408,11 +507,10 @@ export {
   _MFCC,
   _MP,
   _MR,
-  __render,
+  renderInternal,
   // Public methods
   cloneVNode as cloneElement,
   cloneVNode,
-  createClass,
   createComponentVNode,
   createElement,
   createFactory,
@@ -430,13 +528,17 @@ export {
   hydrate,
   isValidElement,
   linkEvent,
+  newComponentVNode,
+  newFragment,
+  newTextVNode,
+  newVNode,
   normalizeProps,
   options,
   render,
   rerender,
   unmountComponentAtNode,
   unstable_renderSubtreeIntoContainer,
-  version
+  version,
 };
 
 export default {
@@ -455,11 +557,10 @@ export default {
   _MFCC,
   _MP,
   _MR,
-  __render,
+  __render: renderInternal,
   // Public methods
   cloneElement: cloneVNode,
   cloneVNode,
-  createClass,
   createComponentVNode,
   createElement,
   createFactory,
@@ -477,11 +578,15 @@ export default {
   hydrate,
   isValidElement,
   linkEvent,
+  newComponentVNode,
+  newFragment,
+  newTextVNode,
+  newVNode,
   normalizeProps,
   options,
   render,
   rerender,
   unmountComponentAtNode,
   unstable_renderSubtreeIntoContainer,
-  version
+  version,
 };
